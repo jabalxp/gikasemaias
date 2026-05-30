@@ -14,6 +14,7 @@ import { Calendar } from './pages/Calendar';
 import { Staff } from './pages/Staff';
 import { Academy } from './pages/Academy';
 import { Market } from './pages/Market';
+import { Friendlies } from './pages/Friendlies';
 import { Finances } from './pages/Finances';
 import { Rankings } from './pages/Rankings';
 import { History } from './pages/History';
@@ -54,6 +55,8 @@ function App() {
         return <Academy />;
       case 'market':
         return <Market />;
+      case 'friendlies':
+        return <Friendlies />;
       case 'finances':
         return <Finances />;
       case 'rankings':

@@ -12,6 +12,25 @@ const WEAPONS = {
   awp: { name: 'AWP', weight: 2.2 }
 };
 
+// Bônus de arma ADITIVO ao poder de duelo (F0). Antes o peso da arma MULTIPLICAVA a mira
+// (aim*weight), o que criava a "espiral da morte econômica": full-buy (1.8) vs eco (1.0) entre
+// times de mesmo nível dava ~99,9% de vitória de duelo, e quem perdia 2-3 rounds nunca
+// reconstruía a economia → 13x0. Tornando o bônus aditivo (eco 0 / force ~8 / buy 15 / awp ~22),
+// a arma dá vantagem real mas limitada, sem dominar o skill. Convertido do peso existente para
+// não tocar nos call sites: bônus = (weight - 1.0) * WEAPON_BONUS_FACTOR.
+const WEAPON_BONUS_FACTOR = 18.75;
+const weaponBonus = (weight: number): number => (weight - 1.0) * WEAPON_BONUS_FACTOR;
+
+// Monta a escalação de 5 (guard-rail F1): titulares + melhores reservas se faltarem titular.
+// Garante que nenhum time jogue com menos de 5 (a store já mantém o invariante; isto é defesa
+// em profundidade caso um save antigo/bug deixe a squad incompleta).
+const pickStarters = (players: Player[]): Player[] => {
+  const titulares = players.filter(p => p.status === 'titular');
+  if (titulares.length >= 5) return titulares;
+  const reservas = players.filter(p => p.status === 'reserva').sort((a, b) => b.overall - a.overall);
+  return [...titulares, ...reservas.slice(0, 5 - titulares.length)];
+};
+
 // Loss Bonus: $1400 -> $1900 -> $2400 -> $2900 -> $3400
 const LOSS_BONUS = [1400, 1900, 2400, 2900, 3400];
 const MAX_CASH = 16000;
@@ -24,9 +43,12 @@ const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.leng
 
 // Pesos de balanceamento da simulação (Fase F — calibrados via balanceHarness.ts)
 const BALANCE_WEIGHTS = {
-  rngAmplitude: 68,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
-  aimWeight: 1.0,
-  overallWeight: 0.15,   // overall pesa, mas não decide tudo (spec §26)
+  // F0 — recalibrado para que o RNG DOMINE em gaps pequenos de skill (lutas competitivas) e só
+  // ceda em gaps grandes. Antes (rng 68, aim 1.0, overall 0.15) o gap determinístico dominava o
+  // ruído: 7 de overall já dava ~67% por round → placares 13-5 e blowouts frequentes.
+  rngAmplitude: 98,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
+  aimWeight: 0.72,       // mira pesa, mas não domina o duelo (era 1.0)
+  overallWeight: 0.07,   // overall já deriva dos atributos; peso baixo evita contar skill em dobro (era 0.15)
   gamesenseWeight: 0.08,
   utilityWeight: 0.08,
   clutchWeight: 0.10,
@@ -89,7 +111,15 @@ export const computeTeamMod = (team: Team, players: Player[], map: GameMap, anal
   if ((ps === 'aggressive' || ps === 'very_aggressive') && map.pace === 'fast') tacticFactor = 1.03;
   else if ((ps === 'defensive' || ps === 'very_defensive') && map.pace === 'slow') tacticFactor = 1.03;
 
-  return masteryFactor * formFactor * moralFactor * tacticFactor;
+  // Liderança (F2): o melhor IGL do time dá coordenação tática ao coletivo (calls, rotações,
+  // controle econômico). Um IGL dedicado de alto nível pesa mais que um rifler liderando no improviso.
+  // ~1.0 a ~1.035 — efeito de TIME (não de frag individual), por isso entra no mod coletivo.
+  const iglRating = players.length > 0
+    ? Math.max(...players.map(p => (p.role === 'IGL' ? p.attributes.igl : p.attributes.igl * 0.6)))
+    : 50;
+  const leadershipFactor = 1 + (iglRating / 100) * 0.035;
+
+  return masteryFactor * formFactor * moralFactor * tacticFactor * leadershipFactor;
 };
 
 // Condição individual do jogador (moral, forma e energia/cansaço) → ~0.90 a ~1.10
@@ -124,14 +154,15 @@ const resolveClash = (
   const attClutchBonus = isPostPlant ? a.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
   const defClutchBonus = isPostPlant ? d.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
 
-  // Poder: mira (peso de arma e posição) + gamesense + OVERALL (peso reduzido) + utilitárias + clutch,
-  // modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do TIME, com RNG ~normal.
-  let attPower = (a.attributes.aim * attackerWeaponWeight * attackerPosFactor * BALANCE_WEIGHTS.aimWeight)
+  // Poder: mira (posição + skill) + BÔNUS DE ARMA ADITIVO + gamesense + OVERALL (peso reduzido)
+  // + utilitárias + clutch, modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do
+  // TIME, com RNG ~normal. A arma soma um bônus fixo (não multiplica a mira) — ver weaponBonus.
+  let attPower = (a.attributes.aim * attackerPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(attackerWeaponWeight)
     + (a.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (a.overall * BALANCE_WEIGHTS.overallWeight)
     + attUtilityBonus + attClutchBonus;
   attPower = attPower * playerCondition(a) * attackerTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
-  let defPower = (d.attributes.aim * defenderWeaponWeight * defenderPosFactor * BALANCE_WEIGHTS.aimWeight)
+  let defPower = (d.attributes.aim * defenderPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(defenderWeaponWeight)
     + (d.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (d.overall * BALANCE_WEIGHTS.overallWeight)
     + defUtilityBonus + defClutchBonus;
   defPower = defPower * playerCondition(d) * defenderTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
@@ -161,9 +192,9 @@ export const simulateRound = (
 ): RoundSim => {
   const events: RoundSimEvent[] = [];
   
-  // Identifica jogadores titulares vivos de cada time
-  const livePlayersA = playersA.filter(p => p.status === 'titular');
-  const livePlayersB = playersB.filter(p => p.status === 'titular');
+  // Identifica os 5 jogadores de cada time (guard-rail F1: completa com reservas se faltar).
+  const livePlayersA = pickStarters(playersA);
+  const livePlayersB = pickStarters(playersB);
 
   // Fail-safe: se um dos times não tem titulares, o round é concedido ao outro.
   // Evita crashes de Math.max(...[]) (-Infinity) e randomChoice([]) (undefined) — cobre os
@@ -185,6 +216,8 @@ export const simulateRound = (
   // Reset do HP e status de sobrevivência no início do round
   const allLivePlayers = [...livePlayersA, ...livePlayersB];
   allLivePlayers.forEach(p => {
+    // Init defensivo: um reserva promovido pelo guard-rail pode não ter liveStats (caminho UI).
+    if (!liveStats[p.id]) liveStats[p.id] = initLivePlayerStats(p, 800);
     const stats = liveStats[p.id];
     stats.alive = true;
     stats.hp = 100;
@@ -635,9 +668,10 @@ export const simulateWholeMatchQuick = (
   analystLevels: { a?: number; b?: number } = {}
 ): Match => {
   const liveStats: Record<string, MatchLivePlayerStats> = {};
-  
-  const activePlayersA = playersA.filter(p => p.status === 'titular');
-  const activePlayersB = playersB.filter(p => p.status === 'titular');
+
+  // Guard-rail (F1): completa a escalação com reservas se faltar titular (ver pickStarters).
+  const activePlayersA = pickStarters(playersA);
+  const activePlayersB = pickStarters(playersB);
 
   activePlayersA.forEach(p => { liveStats[p.id] = initLivePlayerStats(p, 800); });
   activePlayersB.forEach(p => { liveStats[p.id] = initLivePlayerStats(p, 800); });

@@ -5,10 +5,10 @@ import { realTeams } from '../game/data/realTeams';
 import { realMaps } from '../game/data/realMaps';
 import { defaultSponsors } from '../game/data/defaultSponsors';
 import { defaultCompetitions } from '../game/data/defaultCompetitions';
-import { generatePlayer } from '../game/generators/playerGenerator';
+import { generatePlayer, computePlayerValue } from '../game/generators/playerGenerator';
 import { generateMatchNews, generateTransferNews } from '../game/generators/newsGenerator';
 import { simulateMapVeto } from '../game/simulation/mapVetoSimulator';
-import { simulateWholeMatchQuick, simulateAiBracketChampion, BracketTeamEntry } from '../game/simulation/matchSimulator';
+import { simulateWholeMatchQuick, simulateAiBracketChampion, computeTeamMod, BracketTeamEntry } from '../game/simulation/matchSimulator';
 
 // Base/Scout: custo de cada rodada de investimento na base (observação de jovens talentos).
 const INVESTIMENTO_BASE_CUSTO = 30000;
@@ -57,8 +57,10 @@ const crownAiChampion = (
   const championTeam: Team = {
     ...champTeam,
     budget: champTeam.budget + tournament.prizePool,
-    points: champTeam.points + 150,
-    stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
+    points: champTeam.points + Math.round(150 * EVENT_WEIGHT[tournament.tier]), // F4: título de S-Tier rende mais ranking
+    // Conquistar o bracket também conta como vitórias (antes só somava títulos, deixando a
+    // coluna de vitórias das IAs zerada para sempre — bug C do relatório).
+    stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1, wins: champTeam.stats.wins + 1 },
   };
 
   const news: NewsItem = {
@@ -71,6 +73,145 @@ const crownAiChampion = (
   };
 
   return { championId, championTeam, news };
+};
+
+// Pontos por resultado de uma partida de fundo (amistoso/liga paralela). Valem METADE de um
+// confronto de torneio do usuário (±50/−20), para manter o ranking VIVO sem fazer a IA
+// disparar irrealisticamente à frente do progresso do jogador.
+const AI_WEEKLY_WIN_POINTS = 25;
+const AI_WEEKLY_LOSS_POINTS = 10;
+
+/**
+ * Simula uma rodada SEMANAL de partidas de fundo entre as IAs (bug C do relatório: sem isto o
+ * ranking mundial fica congelado entre as poucas viradas de torneio). Emparelha times de IA do
+ * MESMO tier (realismo de divisão) e decide cada confronto por probabilidade derivada da força
+ * (computeTeamMod × overall médio dos titulares), atualizando points/stats/recentForm de AMBOS
+ * de forma imutável. Barata: não roda round-a-round, só uma decisão probabilística por par.
+ *
+ * Função pura: não muta `teams`/`players`. Retorna apenas os times alterados (merge no chamador).
+ */
+const simulateAiWeeklyMatches = (
+  teams: Record<string, Team>,
+  players: Record<string, Player>,
+  map: GameMap,
+  excludeTeamId: string
+): Record<string, Team> => {
+  const startersOf = (teamId: string): Player[] =>
+    Object.values(players).filter((p) => p.teamId === teamId && p.status === 'titular');
+
+  // Times de IA aptos a jogar (têm titulares), agrupados por tier para confrontos coerentes.
+  const byTier = new Map<Team['tier'], Team[]>();
+  Object.values(teams).forEach((t) => {
+    if (t.id === excludeTeamId || t.id === 'free_agents') return;
+    if (startersOf(t.id).length === 0) return;
+    const bucket = byTier.get(t.tier) ?? [];
+    bucket.push(t);
+    byTier.set(t.tier, bucket);
+  });
+
+  const updates: Record<string, Team> = {};
+  const avgOverall = (squad: Player[]): number =>
+    squad.length > 0 ? squad.reduce((acc, p) => acc + p.overall, 0) / squad.length : 50;
+  const pushForm = (form: Team['stats']['recentForm'], r: 'W' | 'L'): Team['stats']['recentForm'] =>
+    [...form, r].slice(-10);
+
+  byTier.forEach((group) => {
+    // Embaralha (Fisher–Yates) e emparelha consecutivos; um time ímpar folga na semana.
+    const shuffled = [...group];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    for (let i = 0; i + 1 < shuffled.length; i += 2) {
+      const teamA = shuffled[i];
+      const teamB = shuffled[i + 1];
+      const squadA = startersOf(teamA.id);
+      const squadB = startersOf(teamB.id);
+      const strengthA = computeTeamMod(teamA, squadA, map) * avgOverall(squadA);
+      const strengthB = computeTeamMod(teamB, squadB, map) * avgOverall(squadB);
+      const probA = strengthA / (strengthA + strengthB);
+      const aWon = Math.random() < probA;
+
+      const winner = aWon ? teamA : teamB;
+      const loser = aWon ? teamB : teamA;
+      updates[winner.id] = {
+        ...winner,
+        points: winner.points + AI_WEEKLY_WIN_POINTS,
+        stats: { ...winner.stats, wins: winner.stats.wins + 1, recentForm: pushForm(winner.stats.recentForm, 'W') },
+      };
+      updates[loser.id] = {
+        ...loser,
+        points: Math.max(10, loser.points - AI_WEEKLY_LOSS_POINTS),
+        stats: { ...loser.stats, losses: loser.stats.losses + 1, recentForm: pushForm(loser.stats.recentForm, 'L') },
+      };
+    }
+  });
+
+  return updates;
+};
+
+// Faixas de overall por tier para gerar jogadores coerentes ao nível do time (reposição de elenco).
+const overallRangeByTier: Record<Team['tier'], { min: number; max: number }> = {
+  1: { min: 76, max: 88 },
+  2: { min: 70, max: 80 },
+  3: { min: 63, max: 74 },
+  4: { min: 55, max: 67 },
+};
+
+// Roles que uma line saudável de CS deve cobrir (F2). Usadas para recompor a IA mantendo uma
+// composição coerente: ao gerar substitutos, prioriza cobrir essas funções ainda ausentes.
+const ESSENTIAL_ROLES: readonly Player['role'][] = ['IGL', 'AWPer', 'Entry Fragger', 'Support'] as const;
+
+/**
+ * Garante que `team` tenha 5 TITULARES, de forma IMUTÁVEL (F1) e CONSCIENTE DE ROLE (F2: ao
+ * perder um jogador, o time repõe a MESMA função — ex.: tirou o AWPer, entra outro AWPer).
+ *  - `lostRole`: função do jogador que acabou de sair (reposição fiel: reserva da role → senão gera da role).
+ *  - vagas restantes: promove os melhores reservas; sem reservas, gera cobrindo as ESSENTIAL_ROLES ausentes.
+ * Retorna um NOVO Record de players (só altera os afetados); se já há 5+, devolve o mesmo objeto.
+ */
+const ensureFiveStarters = (
+  players: Record<string, Player>,
+  team: Team,
+  lostRole?: Player['role']
+): Record<string, Player> => {
+  const titulares = Object.values(players).filter((p) => p.teamId === team.id && p.status === 'titular');
+  let faltam = 5 - titulares.length;
+  if (faltam <= 0) return players;
+
+  const updated = { ...players };
+  const range = overallRangeByTier[team.tier];
+  const bestReserves = (): Player[] =>
+    Object.values(updated)
+      .filter((p) => p.teamId === team.id && p.status === 'reserva')
+      .sort((a, b) => b.overall - a.overall);
+  const gen = (role?: Player['role']): void => {
+    const generated = generatePlayer({ minOverall: range.min, maxOverall: range.max, teamId: team.id, forceRole: role });
+    generated.status = 'titular';
+    updated[generated.id] = generated;
+  };
+
+  // 1) Reposição FIEL da role perdida: reserva da mesma role, senão gera um jogador dessa role.
+  if (lostRole && faltam > 0) {
+    const sameRole = bestReserves().find((r) => r.role === lostRole);
+    if (sameRole) updated[sameRole.id] = { ...sameRole, status: 'titular' };
+    else gen(lostRole);
+    faltam -= 1;
+  }
+
+  // 2) Completa até 5: promove os melhores reservas; sem reservas, gera cobrindo roles essenciais ausentes.
+  while (faltam > 0) {
+    const reservas = bestReserves();
+    if (reservas.length > 0) {
+      updated[reservas[0].id] = { ...reservas[0], status: 'titular' };
+    } else {
+      const cobertas = new Set(
+        Object.values(updated).filter((p) => p.teamId === team.id && p.status === 'titular').map((p) => p.role)
+      );
+      gen(ESSENTIAL_ROLES.find((r) => !cobertas.has(r)) ?? 'Rifler');
+    }
+    faltam -= 1;
+  }
+  return updated;
 };
 
 /**
@@ -89,23 +230,63 @@ const crownAiChampion = (
  * @param userTeamId    Id do time do usuário (terá vaga garantida se elegível).
  * @returns Lista de teamIds elegíveis para o torneio.
  */
-const computeTournamentTeamIds = (
+// Região competitiva canônica (F4: VRS-lite). Mapeia os valores livres de Team.region para os
+// três grandes circuitos do CS — Europa (inclui CIS), Américas (NA+SA), Ásia (inclui Oceania).
+export type CompetitiveRegion = 'EU' | 'AM' | 'AS';
+export const canonicalRegion = (region: string): CompetitiveRegion => {
+  if (/europa|europe|cis/i.test(region)) return 'EU';
+  if (/[áa]sia|pac[íi]f|oceania/i.test(region)) return 'AS';
+  return 'AM'; // América do Sul/Norte e qualquer outro
+};
+
+// Cotas regionais do Major (16 vagas), espelhando a alocação por região do CS real (EU domina).
+const MAJOR_REGION_QUOTA: Record<CompetitiveRegion, number> = { EU: 7, AM: 6, AS: 3 };
+
+// Event Weight por tier de torneio (F4): pontos de ranking ganhos escalam com o prestígio do
+// evento (tier 1 = S-Tier vale muito mais que tier 4 = base). Espelha o Event Weight do VRS real.
+const EVENT_WEIGHT: Record<Team['tier'], number> = { 1: 1.5, 2: 1.0, 3: 0.6, 4: 0.35 };
+
+/**
+ * Define os participantes de um torneio por MÉRITO (F4): em vez de um slice arbitrário, ordena
+ * os times elegíveis (mesmo tier; o Major tier 1 aceita tier ≤ 2) por `points` (ranking) e
+ * convida os melhores. O Major respeita COTAS REGIONAIS (EU/AM/AS). O usuário tem vaga garantida
+ * apenas nos torneios do SEU tier (no seu nível ele sempre compete); torneios de tier superior
+ * (ex.: o Major) exigem CLASSIFICAÇÃO por ranking — é o que dá sentido a "ser convidado por mérito".
+ * Função pura: não muta `teams` nem o torneio.
+ */
+export const computeTournamentTeamIds = (
   tournament: Pick<Tournament, 'id' | 'tier'>,
   teams: Record<string, Team>,
   userTeamId: string
 ): string[] => {
-  const eligibleTeams = Object.values(teams)
-    .filter((team) => team.tier === tournament.tier || (tournament.tier === 1 && team.tier <= 2))
-    .map((team) => team.id);
+  const userTier = teams[userTeamId]?.tier;
+  const eligible = Object.values(teams)
+    .filter((t) => t.id !== 'free_agents' && (t.tier === tournament.tier || (tournament.tier === 1 && t.tier <= 2)))
+    .sort((a, b) => b.points - a.points); // mérito: maior ranking primeiro
 
-  const limit = tournament.id === 'major_mundial' ? 16 : 8;
-  const teamIds = eligibleTeams.slice(0, limit);
+  const isMajor = tournament.id === 'major_mundial';
+  const limit = isMajor ? 16 : 8;
 
-  // Garante a vaga do time do usuário no torneio do seu tier (senão ele nunca jogaria).
-  if (eligibleTeams.includes(userTeamId) && !teamIds.includes(userTeamId)) {
-    teamIds[teamIds.length - 1] = userTeamId;
+  let selected: string[];
+  if (isMajor) {
+    const picked = new Set<string>();
+    const byRegion: Record<CompetitiveRegion, Team[]> = { EU: [], AM: [], AS: [] };
+    eligible.forEach((t) => byRegion[canonicalRegion(t.region)].push(t));
+    (['EU', 'AM', 'AS'] as const).forEach((reg) => {
+      byRegion[reg].slice(0, MAJOR_REGION_QUOTA[reg]).forEach((t) => picked.add(t.id));
+    });
+    // Completa as vagas que sobraram (região sem times suficientes) com os melhores globais.
+    for (const t of eligible) { if (picked.size >= limit) break; picked.add(t.id); }
+    selected = [...picked].slice(0, limit);
+  } else {
+    selected = eligible.slice(0, limit).map((t) => t.id);
   }
-  return teamIds;
+
+  // Vaga garantida do usuário SOMENTE no(s) torneio(s) do seu próprio tier.
+  if (userTier === tournament.tier && teams[userTeamId] && !selected.includes(userTeamId)) {
+    selected[selected.length - 1] = userTeamId;
+  }
+  return selected;
 };
 
 // ===== NEGOCIAÇÃO DE TRANSFERÊNCIAS =====
@@ -365,43 +546,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       teamsData[finalUserTeamId].budget = startingBudget;
     }
 
-    // Garante que TODO time tenha pelo menos 5 titulares (spec §6.1/§8: times incompletos
-    // são preenchidos com jogadores gerados). Sem isso, ~60 times ficam sem elenco e a
-    // simulação quebra (Math.max de array vazio / MVP indefinido).
-    const overallRangeByTier: Record<Team['tier'], { min: number; max: number }> = {
-      1: { min: 76, max: 88 },
-      2: { min: 70, max: 80 },
-      3: { min: 63, max: 74 },
-      4: { min: 55, max: 67 },
-    };
+    // Garante que TODO time tenha pelo menos 5 titulares (spec §6.1/§8). Sem isso, ~60 times
+    // ficam sem elenco e a simulação quebra. Reutiliza o helper ensureFiveStarters (DRY) que
+    // promove reservas e gera por tier; aqui aplicamos o resultado in-place (estado pré-set).
     Object.values(teamsData).forEach((team) => {
-      const titulares = Object.values(playersData).filter(
-        (p) => p.teamId === team.id && p.status === 'titular'
-      );
-      let faltam = 5 - titulares.length;
-      if (faltam <= 0) return;
-
-      // Primeiro, promove reservas já existentes do próprio time
-      const reservas = Object.values(playersData).filter(
-        (p) => p.teamId === team.id && p.status === 'reserva'
-      );
-      for (const reserva of reservas) {
-        if (faltam <= 0) break;
-        reserva.status = 'titular';
-        faltam--;
-      }
-
-      // Gera o restante com overall coerente ao tier do time
-      const range = overallRangeByTier[team.tier];
-      while (faltam > 0) {
-        const generated = generatePlayer({
-          minOverall: range.min,
-          maxOverall: range.max,
-          teamId: team.id,
-        });
-        generated.status = 'titular';
-        playersData[generated.id] = generated;
-        faltam--;
+      const filled = ensureFiveStarters(playersData, team);
+      if (filled !== playersData) {
+        Object.keys(filled).forEach((id) => { playersData[id] = filled[id]; });
       }
     });
 
@@ -680,8 +831,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // 4. SIMULAR PARTIDAS DE OUTRAS EQUIPES DE TORNEIOS DE FUNDO
-    // (Simulações simplificadas para alimentar o ranking e notícias)
+    // 4. SIMULAR PARTIDAS DE OUTRAS EQUIPES DE TORNEIOS DE FUNDO (bug C do relatório).
+    // Mantém o ranking mundial VIVO: a cada semana as IAs disputam partidas de fundo (ligas
+    // paralelas) que movem points/vitórias/forma recente. Sem isto, só o time do usuário se
+    // mexia no ranking. Usa um mapa ativo aleatório como cenário do veto de fundo.
+    const aiWeekMap = realMaps.filter(m => m.status === 'active');
+    const aiBackgroundMap = aiWeekMap[Math.floor(Math.random() * aiWeekMap.length)] ?? realMaps[0];
+    const aiWeeklyUpdates = simulateAiWeeklyMatches(updatedTeams, updatedPlayers, aiBackgroundMap, userTeamId);
+    Object.assign(updatedTeams, aiWeeklyUpdates);
 
     // Avança a semana
     const nextWeek = currentWeek + 1;
@@ -769,48 +926,80 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
-      // 2. ENVELHECIMENTO + APOSENTADORIA + EVOLUÇÃO DE POTENCIAL.
-      // Jovens (<=22) evoluem mais forte rumo ao potencial; veteranos podem se aposentar.
+      // 2. ENVELHECIMENTO + APOSENTADORIA + EVOLUÇÃO/DECLÍNIO (cobre TODOS os times, inclusive IA).
+      // F3 — mundo vivo: jovens evoluem rumo ao potencial (com headroom para destravar o gate),
+      // veteranos declinam de reflexo, e o restante só envelhece. media5 = overall pelos atributos.
+      const media5 = (a: Player['attributes']): number =>
+        Math.round((a.aim + a.gamesense + a.clutch + a.utility + a.igl) / 5);
       Object.values(updatedPlayers).forEach(prev => {
         const newAge = prev.age + 1;
+        const ativo = prev.status === 'titular' || prev.status === 'reserva';
 
         // Aposentadoria por idade (obrigatória acima de 38, probabilística acima de 35)
         if (newAge > 38 || (newAge > 35 && Math.random() < 0.4)) {
-          updatedPlayers[prev.id] = {
-            ...prev,
-            age: newAge,
-            status: 'aposentado',
-            teamId: 'free_agents',
-          };
+          updatedPlayers[prev.id] = { ...prev, age: newAge, status: 'aposentado', teamId: 'free_agents' };
           return;
         }
 
-        // Evolução de potencial: jovens evoluem mais (spec §15). Só evolui quem ainda
-        // não atingiu o potencial e está ativo (titular/reserva).
-        if ((prev.status === 'titular' || prev.status === 'reserva') && prev.overall < prev.potential) {
+        // F3 — HEADROOM DE POTENCIAL: jovens promissores "descobrem teto". Sem isto, astros de IA
+        // com potential≈overall (FalleN 83/83) nunca evoluem e o mundo congela. Eleva levemente o teto.
+        let potential = prev.potential;
+        if (ativo && newAge <= 23 && potential - prev.overall < 3 && Math.random() < 0.4) {
+          potential = Math.min(99, potential + 1 + Math.floor(Math.random() * 2));
+        }
+
+        // Evolução rumo ao potencial: jovens evoluem mais forte (spec §15).
+        if (ativo && prev.overall < potential) {
           const evolBoost = newAge <= 22 ? 2 + Math.floor(Math.random() * 3) : Math.floor(Math.random() * 2);
           if (evolBoost > 0) {
             const updatedAttrs: Player['attributes'] = { ...prev.attributes };
             (['aim', 'gamesense', 'clutch', 'utility', 'igl'] as (keyof Player['attributes'])[]).forEach((k) => {
-              if (Math.random() < (newAge <= 22 ? 0.6 : 0.3)) {
-                updatedAttrs[k] = Math.min(99, updatedAttrs[k] + evolBoost);
-              }
+              if (Math.random() < (newAge <= 22 ? 0.6 : 0.3)) updatedAttrs[k] = Math.min(99, updatedAttrs[k] + evolBoost);
             });
-            updatedPlayers[prev.id] = {
-              ...prev,
-              age: newAge,
-              attributes: updatedAttrs,
-              overall: Math.min(
-                prev.potential,
-                Math.round((updatedAttrs.aim + updatedAttrs.gamesense + updatedAttrs.clutch + updatedAttrs.utility + updatedAttrs.igl) / 5)
-              ),
-            };
+            updatedPlayers[prev.id] = { ...prev, age: newAge, potential, attributes: updatedAttrs, overall: Math.min(potential, media5(updatedAttrs)) };
             return;
           }
         }
 
-        // Sem evolução nem aposentadoria: apenas envelhece (cópia imutável)
-        updatedPlayers[prev.id] = { ...prev, age: newAge };
+        // F3 — DECLÍNIO DE VETERANOS: dos 31+, reflexo/clutch caem aos poucos (chance cresce com a idade).
+        if (ativo && newAge >= 31 && Math.random() < (newAge - 30) * 0.15) {
+          const updatedAttrs: Player['attributes'] = { ...prev.attributes };
+          const decair = (k: keyof Player['attributes']) => { updatedAttrs[k] = Math.max(40, updatedAttrs[k] - (1 + Math.floor(Math.random() * 2))); };
+          decair('aim');
+          decair('clutch');
+          updatedPlayers[prev.id] = { ...prev, age: newAge, potential, attributes: updatedAttrs, overall: media5(updatedAttrs) };
+          return;
+        }
+
+        // Sem evolução nem declínio: apenas envelhece (mantém o potential possivelmente elevado)
+        updatedPlayers[prev.id] = { ...prev, age: newAge, potential };
+      });
+
+      // 2b. REPOSIÇÃO DE ELENCO (F1): aposentadorias deixam times de IA com <5 titulares; sem
+      // repor, os elencos encolhem até sumir. Garante 5 titulares em TODOS os times na virada.
+      Object.values(updatedTeams).forEach((team) => {
+        if (team.id === 'free_agents') return;
+        const filled = ensureFiveStarters(updatedPlayers, team);
+        if (filled !== updatedPlayers) Object.assign(updatedPlayers, filled);
+      });
+
+      // 2c. MERCADO E REPUTAÇÃO VIVOS (F3): o value de mercado acompanha a força ATUAL (jovens que
+      // evoluíram valem mais; veteranos em queda, menos) e a reputação das IAs deriva da forma
+      // recente (sobe quem vem vencendo, cai quem vem perdendo) — mobilidade sem achatar a hierarquia.
+      Object.values(updatedPlayers).forEach((p) => {
+        if (p.status === 'aposentado') return;
+        const v = computePlayerValue(p.overall, p.age, p.potential);
+        if (v !== p.value) updatedPlayers[p.id] = { ...p, value: v };
+      });
+      Object.values(updatedTeams).forEach((team) => {
+        if (team.id === 'free_agents' || team.id === userTeamId) return;
+        const form = team.stats.recentForm.slice(-10);
+        if (form.length === 0) return;
+        const winRatio = form.filter((r) => r === 'W').length / form.length;
+        const deltaRep = Math.round((winRatio - 0.5) * 6); // -3..+3 por temporada
+        if (deltaRep !== 0) {
+          updatedTeams[team.id] = { ...team, reputation: Math.max(30, Math.min(99, team.reputation + deltaRep)) };
+        }
       });
 
       // 3. RESET DOS TORNEIOS — volta ao estado inicial mantendo os participantes.
@@ -1037,6 +1226,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       contractMonths: 18 // contrato inicial de 18 meses
     };
 
+    // F1/F2: o time vendedor (IA) ficou desfalcado — repõe imediatamente a MESMA role do jogador que saiu.
+    if (oldTeamId !== 'free_agents' && updatedTeams[oldTeamId]) {
+      const filled = ensureFiveStarters(updatedPlayers, updatedTeams[oldTeamId], player.role);
+      if (filled !== updatedPlayers) Object.assign(updatedPlayers, filled);
+    }
+
     // Gera notícia dinamicamente
     const news = generateTransferNews(player, oldTeamName, userTeam.name, currentWeek);
 
@@ -1078,6 +1273,26 @@ export const useGameStore = create<GameState>((set, get) => ({
         success: false,
         status: 'recusada',
         message: `Saldo insuficiente! A oferta exige $${totalCost.toLocaleString()} em caixa (Passe: $${valor.toLocaleString()} + Luvas: $${signingBonus.toLocaleString()}).`,
+      };
+    }
+
+    // RESERVA DE FOLHA (risco B do relatório): aprovar uma compra que zera o caixa deixava o
+    // time falir na semana seguinte pela folha salarial obrigatória. Exige que o caixa PÓS-
+    // transferência cubra ao menos uma folha semanal (jogadores + staff + o novo salário).
+    const staffList = get().staffList;
+    const staffSlots: (keyof Team['staff'])[] = ['coachId', 'analystId', 'psychologistId', 'scoutId', 'physioId'];
+    const folhaStaff = staffSlots.reduce((acc, slot) => {
+      const staffId = userTeam.staff[slot];
+      return acc + (staffId && staffList[staffId] ? staffList[staffId].salary : 0);
+    }, 0);
+    const folhaJogadores = Object.values(players).reduce((acc, p) => (p.teamId === userTeamId ? acc + p.salary : acc), 0);
+    const proximaFolha = folhaJogadores + folhaStaff + salario; // o recém-contratado entra na folha
+    const caixaPosTransferencia = userTeam.budget - totalCost;
+    if (caixaPosTransferencia < proximaFolha) {
+      return {
+        success: false,
+        status: 'recusada',
+        message: `Caixa insuficiente para sustentar a folha! Após a transferência sobrariam $${caixaPosTransferencia.toLocaleString()}, abaixo da folha salarial semanal de $${proximaFolha.toLocaleString()}. Reduza o salário, venda um jogador ou assine um patrocínio antes de fechar.`,
       };
     }
 
@@ -1130,6 +1345,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       value: Math.max(player.value, valor), // valorização: passe negociado vira o novo piso de mercado
     };
 
+    // F1/F2: repõe o time vendedor (IA) com a MESMA role do jogador negociado (ex.: AWPer → AWPer).
+    if (sellerTeam) {
+      const filled = ensureFiveStarters(updatedPlayers, updatedTeams[oldTeamId], player.role);
+      if (filled !== updatedPlayers) Object.assign(updatedPlayers, filled);
+    }
+
     const news = generateTransferNews(player, oldTeamName, userTeam.name, currentWeek);
 
     set({
@@ -1179,6 +1400,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       contractMonths: 0
     };
 
+    // F1/F2: se um titular saiu, promove automaticamente o melhor reserva da MESMA role (mantém 5).
+    const filledAfterSale = ensureFiveStarters(updatedPlayers, updatedTeams[userTeamId], player.role);
+    if (filledAfterSale !== updatedPlayers) Object.assign(updatedPlayers, filledAfterSale);
+
     set({
       teams: updatedTeams,
       players: updatedPlayers,
@@ -1204,7 +1429,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   dispensarJogador: (playerId) => {
-    const { players, userTeamId } = get();
+    const { players, teams, userTeamId } = get();
     const updatedPlayers = { ...players };
 
     const userTotalPlayers = Object.values(players).filter(p => p.teamId === userTeamId).length;
@@ -1219,6 +1444,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         status: 'free_agent',
         contractMonths: 0,
       };
+    }
+
+    // F1/F2: promove o melhor reserva (preferindo a role do dispensado) para manter 5 titulares.
+    const userTeamObj = teams[userTeamId];
+    if (userTeamObj) {
+      const filled = ensureFiveStarters(updatedPlayers, userTeamObj, players[playerId]?.role);
+      if (filled !== updatedPlayers) Object.assign(updatedPlayers, filled);
     }
 
     set({ players: updatedPlayers });
@@ -1666,10 +1898,20 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isUserWinner = activeMatch.winnerId === userTeamId;
 
     const updatedTeams = { ...teams };
+    // F4: partida valendo ranking só se for de TORNEIO; o peso do evento (tier) escala os pontos.
+    // Amistoso é treino NEUTRO — não mexe em ranking, reputação, caixa nem estatísticas (corrige
+    // o farm de pontos/reputação via amistoso apontado no relatório).
+    const tourneyForMatch = tournaments[activeMatch.competitionId];
+    const isFriendly = activeMatch.competitionId === 'amistoso' || !tourneyForMatch;
+    const eventWeight = tourneyForMatch ? EVENT_WEIGHT[tourneyForMatch.tier] : 0;
+
     // Acumula entradas do extrato e aplica TUDO num único set() no fim (evita "torn state"
     // com múltiplos set intermediários lendo get().financialHistory em sequência).
     const finEntries: { week: number; description: string; amount: number }[] = [];
-    if (isUserWinner) {
+    if (isFriendly) {
+      // Treino: nenhum efeito competitivo (moral/forma já são tratados fora da partida).
+      updatedTeams[userTeamId] = userTeam;
+    } else if (isUserWinner) {
       // Premiação base por vitória + bônus do patrocinador (entradas separadas no extrato)
       const basePrize = 5000;
       const activeSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
@@ -1679,7 +1921,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // +2 de reputação (teto 100): é o motor de progressão que destrava promoção de tier.
       updatedTeams[userTeamId] = {
         ...userTeam,
-        points: userTeam.points + 50, // bônus de ranking
+        points: userTeam.points + Math.round(50 * eventWeight), // bônus de ranking escalado pelo tier do evento
         budget: userTeam.budget + basePrize + winBonus,
         reputation: Math.min(100, userTeam.reputation + 2),
         stats: { ...userTeam.stats, wins: userTeam.stats.wins + 1 },
@@ -1751,7 +1993,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           updatedTeams[userTeamId] = {
             ...champTeam,
             budget: champTeam.budget + tourney.prizePool + titleBonus,
-            points: champTeam.points + 150,
+            points: champTeam.points + Math.round(150 * EVENT_WEIGHT[tourney.tier]), // F4: título escala com o tier
             reputation: Math.min(100, champTeam.reputation + 8),
             stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
           };

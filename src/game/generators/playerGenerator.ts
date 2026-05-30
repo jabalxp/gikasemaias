@@ -24,11 +24,24 @@ const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.leng
 // Gera número no range
 const randomRange = (min: number, max: number): number => Math.floor(Math.random() * (max - min + 1)) + min;
 
+/**
+ * Valor de mercado de um jogador a partir de overall/idade/potencial. Extraído para ser
+ * reutilizado tanto na geração quanto no recálculo periódico (F3: jovens que evoluem passam a
+ * valer mais; veteranos que decaem, menos — o mercado de IA acompanha a força real).
+ */
+export const computePlayerValue = (overall: number, age: number, potential: number): number => {
+  const ageFactor = Math.max(0.5, (35 - age) / 10); // jovens multiplicam o valor
+  const potentialFactor = Math.max(1.0, (potential - 50) / 10);
+  const baseValue = Math.pow(Math.max(0, overall - 40), 3) * 0.15; // escala exponencial
+  return Math.max(5000, Math.round(baseValue * ageFactor * potentialFactor));
+};
+
 export const generatePlayer = (
   options: {
     minOverall?: number;
     maxOverall?: number;
     forceNationality?: string;
+    forceRole?: Player['role']; // força a função (usado na recomposição de elenco por role)
     teamId?: string;
     isYouth?: boolean; // Se for da base, gera com menos idade e potencial alto
   } = {}
@@ -57,7 +70,7 @@ export const generatePlayer = (
     ? randomRange(overall + 10, Math.min(99, overall + 25))
     : randomRange(overall, Math.min(99, overall + 10));
 
-  const role = randomChoice(ROLES);
+  const role = options.forceRole ?? randomChoice(ROLES);
   const subRoles = [randomChoice(ROLES.filter(r => r !== role))];
   const personality = randomChoice(PERSONALITIES);
 
@@ -98,11 +111,8 @@ export const generatePlayer = (
     (attributes.aim + attributes.gamesense + attributes.clutch + attributes.utility + attributes.igl) / 5
   ));
 
-  // Valor de mercado ponderado: quanto mais jovem e com potencial maior, mais vale
-  const ageFactor = Math.max(0.5, (35 - age) / 10); // Jovens multiplicam o valor
-  const potentialFactor = Math.max(1.0, (potential - 50) / 10);
-  const baseValue = Math.pow(calculatedOverall - 40, 3) * 0.15; // Escala exponencial
-  const value = Math.max(5000, Math.round(baseValue * ageFactor * potentialFactor));
+  // Valor de mercado ponderado: quanto mais jovem e com potencial maior, mais vale (ver helper)
+  const value = computePlayerValue(calculatedOverall, age, potential);
 
   // Salário semanal baseado no overall. Curva suavizada (coeficiente 0.85 e base de
   // subtração mais alta) para não explodir a folha de jogadores gerados — a receita base
