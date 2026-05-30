@@ -1,3 +1,31 @@
+# ProStrike Manager
+
+Jogo manager de e-sports de CS (React + TypeScript + Vite + Zustand).
+
+## Rodar localmente
+```bash
+npm install
+npm run dev      # desenvolvimento (localhost:5173)
+npm run build    # build de produção -> pasta dist/
+npm run preview  # serve o build localmente para testar
+```
+
+## Deploy na Cloudflare Pages (IMPORTANTE)
+
+> ⚠️ O erro **"Failed to load module script: ... MIME type application/octet-stream"** acontece quando a Pages serve a **raiz do projeto** (o `index.html` de desenvolvimento aponta para `/src/main.tsx`, que o servidor entrega como `octet-stream`). A correção é a Pages **buildar e servir a pasta `dist/`**, nunca a raiz.
+
+Configuração correta no painel da Cloudflare Pages (Settings → Builds & deployments):
+
+| Campo | Valor |
+|-------|-------|
+| **Framework preset** | Vite |
+| **Build command** | `npm run build` |
+| **Build output directory** | `dist` |
+
+O `wrangler.toml` na raiz já declara `pages_build_output_dir = "dist"`. Os arquivos `public/_headers` (reforço de MIME dos `.js`) e `public/_redirects` (fallback SPA) são copiados para o `dist/` no build. A pasta `dist/` **não** é versionada (está no `.gitignore`) — a Pages a gera no build.
+
+---
+
 # React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.

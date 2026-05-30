@@ -1,0 +1,9 @@
+# Reforço de MIME para os módulos do build (caso a Pages erre o Content-Type).
+# O fix principal é servir a pasta dist/ (ver wrangler.toml). Estes headers entram
+# no dist/ durante o build e garantem que os scripts ES module sejam aceitos.
+/*.js
+  Content-Type: text/javascript; charset=utf-8
+/assets/*.js
+  Content-Type: text/javascript; charset=utf-8
+/assets/*.css
+  Content-Type: text/css; charset=utf-8

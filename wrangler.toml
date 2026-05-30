@@ -1,0 +1,8 @@
+name = "prostrike-manager"
+compatibility_date = "2026-05-30"
+
+# Cloudflare Pages: a SAÍDA do build (npm run build) é a pasta dist/.
+# Sem isso, a Pages serve a raiz do projeto (index.html de dev que aponta para
+# /src/main.tsx), e o navegador recebe o .tsx como application/octet-stream,
+# disparando "Failed to load module script: ... MIME type octet-stream".
+pages_build_output_dir = "dist"
