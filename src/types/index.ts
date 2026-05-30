@@ -222,6 +222,41 @@ export interface SeasonSummary {
   };
 }
 
+/** Campeão de um torneio registrado no histórico permanente (forma enxuta do snapshot). */
+export interface SeasonHistoryChampion {
+  tournamentId: string;
+  tournamentName: string;
+  championId: string;
+  championName: string;
+  championTag: string;
+}
+
+/** Registro permanente de uma temporada encerrada (Histórico & Títulos). */
+export interface SeasonHistoryEntry {
+  season: number;
+  champions: SeasonHistoryChampion[];
+  userWins: number;
+  userLosses: number;
+  userTitles: number;
+}
+
+/** Status de uma rodada de negociação de contratação. */
+export type NegotiationStatus = 'aceita' | 'contraproposta' | 'recusada';
+
+/** Contraproposta do clube vendedor / jogador (valor de passe e salário exigidos). */
+export interface NegotiationCounter {
+  valor: number;
+  salario: number;
+}
+
+/** Resultado de uma rodada de negociação (negociarContratacao). */
+export interface NegotiationResult {
+  success: boolean;
+  message: string;
+  status: NegotiationStatus;
+  contraproposta?: NegotiationCounter;
+}
+
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 export interface Toast {
@@ -254,4 +289,5 @@ export interface SaveGame {
   }[];
   trainingPlan?: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
   youthProspects?: Player[]; // Jovens observados na base/scout (opcional p/ saves antigos)
+  historicoTemporadas?: SeasonHistoryEntry[]; // Histórico permanente de temporadas (opcional p/ saves antigos)
 }

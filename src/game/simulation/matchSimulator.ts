@@ -764,3 +764,92 @@ export const simulateWholeMatchQuick = (
     liveStats
   };
 };
+
+// ============================================================================
+// RESOLUÇÃO RÁPIDA DE BRACKET DE IA (campeonatos sem participação do usuário)
+// ============================================================================
+//
+// Para confrontos IA vs IA não precisamos do feed round-a-round nem das liveStats:
+// basta um vencedor. Usamos uma resolução PROBABILÍSTICA baseada no poder do time
+// (overall médio dos titulares modulado por computeTeamMod), com uma cauda de RNG
+// que preserva zebras. Complexidade O(n) por confronto vs. O(rounds * duelos) do
+// simulador completo — adequado para resolver um bracket inteiro de fundo por semana.
+
+export interface BracketTeamEntry {
+  readonly team: Team;
+  readonly players: readonly Player[];
+}
+
+// Poder de combate do time: overall médio dos titulares × modificador de time (mapa/forma/moral).
+const computeTeamPower = (entry: BracketTeamEntry, map: GameMap): number => {
+  const starters = entry.players.filter(p => p.status === 'titular');
+  if (starters.length === 0) return 0;
+  const avgOverall = starters.reduce((acc, p) => acc + p.overall, 0) / starters.length;
+  return avgOverall * computeTeamMod(entry.team, [...starters], map);
+};
+
+/**
+ * Resolve um confronto IA vs IA de forma rápida e probabilística.
+ * Retorna o ID do time vencedor. A chance de vitória é proporcional ao poder relativo
+ * dos times, com um piso/teto (5%–95%) que garante imprevisibilidade (zebras).
+ */
+export const resolveQuickClash = (
+  entryA: BracketTeamEntry,
+  entryB: BracketTeamEntry,
+  map: GameMap
+): string => {
+  const powerA = computeTeamPower(entryA, map);
+  const powerB = computeTeamPower(entryB, map);
+
+  // Fail-safe: time sem titulares perde por W.O.
+  if (powerA <= 0 && powerB <= 0) return Math.random() < 0.5 ? entryA.team.id : entryB.team.id;
+  if (powerA <= 0) return entryB.team.id;
+  if (powerB <= 0) return entryA.team.id;
+
+  // Probabilidade logística suave: diferença de poder → chance de A vencer, com teto 5%–95%.
+  const winChanceA = Math.min(0.95, Math.max(0.05, powerA / (powerA + powerB)));
+  return Math.random() < winChanceA ? entryA.team.id : entryB.team.id;
+};
+
+/**
+ * Resolve um bracket de eliminação simples entre os times informados e retorna o
+ * championId. Embaralha os participantes, pareia-os por rodada e avança os vencedores
+ * até sobrar um único time. Times com bye (rodada ímpar) avançam automaticamente.
+ *
+ * @param entries Times participantes (mínimo 1). Se vazio, retorna null.
+ * @param map     Mapa usado para modular o poder dos confrontos.
+ */
+export const simulateAiBracketChampion = (
+  entries: readonly BracketTeamEntry[],
+  map: GameMap
+): string | null => {
+  if (entries.length === 0) return null;
+  if (entries.length === 1) return entries[0].team.id;
+
+  // Embaralha (Fisher-Yates) para que o chaveamento não seja determinístico.
+  const pool: BracketTeamEntry[] = [...entries];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  let remaining: BracketTeamEntry[] = pool;
+  // Cada iteração resolve uma rodada inteira; O(n) confrontos no total (n + n/2 + ...).
+  while (remaining.length > 1) {
+    const winners: BracketTeamEntry[] = [];
+    for (let i = 0; i < remaining.length; i += 2) {
+      const home = remaining[i];
+      const away = remaining[i + 1];
+      if (!away) {
+        // Bye: número ímpar de times nesta rodada — o último avança direto.
+        winners.push(home);
+        continue;
+      }
+      const winnerId = resolveQuickClash(home, away, map);
+      winners.push(winnerId === home.team.id ? home : away);
+    }
+    remaining = winners;
+  }
+
+  return remaining[0].team.id;
+};

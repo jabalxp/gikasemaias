@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Match, Player, SaveGame, Sponsor, Staff, Team, Tournament, GameMap, NewsItem, SeasonSummary, SeasonChampionSnapshot, Toast, ToastType } from '../types';
+import { Match, Player, SaveGame, Sponsor, Staff, Team, Tournament, GameMap, NewsItem, SeasonSummary, SeasonChampionSnapshot, SeasonHistoryEntry, Toast, ToastType, NegotiationResult } from '../types';
 import { realPlayers } from '../game/data/realPlayers';
 import { realTeams } from '../game/data/realTeams';
 import { realMaps } from '../game/data/realMaps';
@@ -8,10 +8,145 @@ import { defaultCompetitions } from '../game/data/defaultCompetitions';
 import { generatePlayer } from '../game/generators/playerGenerator';
 import { generateMatchNews, generateTransferNews } from '../game/generators/newsGenerator';
 import { simulateMapVeto } from '../game/simulation/mapVetoSimulator';
-import { simulateWholeMatchQuick } from '../game/simulation/matchSimulator';
+import { simulateWholeMatchQuick, simulateAiBracketChampion, BracketTeamEntry } from '../game/simulation/matchSimulator';
 
 // Base/Scout: custo de cada rodada de investimento na base (observação de jovens talentos).
 const INVESTIMENTO_BASE_CUSTO = 30000;
+
+// Resultado da coroação de um campeão de IA: o time premiado (cópia imutável) + a notícia.
+interface AiChampionOutcome {
+  readonly championId: string;
+  readonly championTeam: Team;
+  readonly news: NewsItem;
+}
+
+/**
+ * Coroa um campeão de IA para um torneio em que o usuário NÃO venceu (foi eliminado ou
+ * o torneio é de fundo). Simula o bracket de eliminação entre os times de IA elegíveis,
+ * premia o campeão (budget/points/stats.titles) de forma imutável e devolve a notícia.
+ *
+ * @param tournament   Torneio a resolver.
+ * @param teams        Mapa atual de times (não é mutado).
+ * @param players      Mapa atual de jogadores (não é mutado).
+ * @param excludeTeamId Time a excluir do bracket de IA (tipicamente o usuário já resolvido).
+ * @param map          Mapa usado para modular o poder dos confrontos.
+ * @param currentWeek  Semana atual (para a notícia).
+ * @returns Outcome com o campeão de IA, ou null se não houver times de IA elegíveis.
+ */
+const crownAiChampion = (
+  tournament: Tournament,
+  teams: Record<string, Team>,
+  players: Record<string, Player>,
+  excludeTeamId: string | null,
+  map: GameMap,
+  currentWeek: number
+): AiChampionOutcome | null => {
+  const entries: BracketTeamEntry[] = tournament.teamIds
+    .filter((id) => id !== excludeTeamId && teams[id])
+    .map((id) => ({
+      team: teams[id],
+      players: Object.values(players).filter((p) => p.teamId === id && p.status === 'titular'),
+    }));
+
+  if (entries.length === 0) return null;
+
+  const championId = simulateAiBracketChampion(entries, map);
+  if (!championId || !teams[championId]) return null;
+
+  const champTeam = teams[championId];
+  const championTeam: Team = {
+    ...champTeam,
+    budget: champTeam.budget + tournament.prizePool,
+    points: champTeam.points + 150,
+    stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
+  };
+
+  const news: NewsItem = {
+    id: `champ_ai_${tournament.id}_${currentWeek}`,
+    title: `${champTeam.name} conquista o ${tournament.name}!`,
+    content: `O ${champTeam.name} superou os adversários no bracket e levantou a taça do ${tournament.name}, faturando $${tournament.prizePool.toLocaleString()} em premiação. Um novo nome entra para a história da competição.`,
+    category: 'results',
+    week: currentWeek,
+    dateStr: `Semana ${currentWeek}`,
+  };
+
+  return { championId, championTeam, news };
+};
+
+// ===== NEGOCIAÇÃO DE TRANSFERÊNCIAS =====
+// Resultado puro da avaliação de interesse (sem efeitos colaterais nem checagem de caixa).
+interface NegotiationEvaluation {
+  readonly status: import('../types').NegotiationStatus;
+  readonly contraproposta?: import('../types').NegotiationCounter;
+}
+
+/**
+ * Avalia o interesse do jogador/clube vendedor numa oferta de contratação.
+ *
+ * Heurística (0..1, quanto maior, mais atraente a oferta):
+ *  - valorScore: passe oferecido vs valor de mercado (peso maior — é o que o clube vendedor
+ *    mais pesa). Free agents não têm passe, então o valor exigido é simbólico.
+ *  - salarioScore: salário oferecido vs salário atual (o jogador quer manter/melhorar ganhos).
+ *  - reputacaoScore: reputação do time do usuário torna o destino mais desejável.
+ *
+ * Decisão:
+ *  - score >= 1.0  → aceita
+ *  - score >= 0.75 → contraproposta (devolve valor/salário-alvo que destravariam o acordo)
+ *  - score <  0.75 → recusada
+ *
+ * @param player          Jogador-alvo (não é mutado).
+ * @param sellerTeam      Time vendedor, ou null para agente livre.
+ * @param userReputation  Reputação do time do usuário (0-100).
+ * @param valorOferta     Passe oferecido ($).
+ * @param salarioOferta   Salário semanal oferecido ($).
+ */
+const evaluateNegotiation = (
+  player: Player,
+  sellerTeam: Team | null,
+  userReputation: number,
+  valorOferta: number,
+  salarioOferta: number
+): NegotiationEvaluation => {
+  const isFreeAgent = sellerTeam === null;
+
+  // Valor de referência do passe. Agentes livres não exigem passe alto — apenas luvas simbólicas.
+  const referenceValue = isFreeAgent ? Math.max(1, Math.round(player.value * 0.15)) : Math.max(1, player.value);
+  const valorScore = Math.min(1.5, valorOferta / referenceValue);
+
+  // Salário de referência: jogador quer pelo menos manter o salário atual.
+  const referenceSalary = Math.max(1, player.salary);
+  const salarioScore = Math.min(1.5, salarioOferta / referenceSalary);
+
+  // Reputação: 0..100 → 0..0.2 de bônus. Times grandes atraem mais facilmente.
+  const reputacaoScore = (userReputation / 100) * 0.2;
+
+  // Resistência do clube vendedor: quanto melhor o jogador para ele, mais difícil liberar.
+  // (free agent não tem clube, então sem resistência).
+  const sellerResistance = isFreeAgent ? 0 : Math.min(0.15, (player.overall / 100) * 0.15);
+
+  // Score composto: valor pesa 60%, salário 40%, + bônus de reputação − resistência do clube.
+  const score = valorScore * 0.6 + salarioScore * 0.4 + reputacaoScore - sellerResistance;
+
+  if (score >= 1.0) {
+    return { status: 'aceita' };
+  }
+
+  if (score >= 0.75) {
+    // Contraproposta: pede o que destravaria o acordo (valor de mercado cheio + 5%, salário atual + 10%).
+    const valorAlvo = Math.round((isFreeAgent ? referenceValue : player.value) * 1.05);
+    const salarioAlvo = Math.round(player.salary * 1.1);
+    return {
+      status: 'contraproposta',
+      contraproposta: {
+        // Nunca pede menos do que já foi oferecido (evita contraproposta "para baixo").
+        valor: Math.max(valorAlvo, valorOferta),
+        salario: Math.max(salarioAlvo, salarioOferta),
+      },
+    };
+  }
+
+  return { status: 'recusada' };
+};
 
 interface GameState {
   // Dados salváveis
@@ -31,6 +166,7 @@ interface GameState {
   financialHistory: SaveGame['financialHistory'];
   trainingPlan: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
   youthProspects: Player[]; // Base/Scout: jovens observados aguardando promoção
+  historicoTemporadas: SeasonHistoryEntry[]; // Histórico permanente de temporadas encerradas
 
   // Estados locais UI / Sessão
   currentScreen: string;
@@ -59,6 +195,7 @@ interface GameState {
   definirTaticas: (tactics: Team['tactics']) => void;
   definirTreinoSemanal: (intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp', focus: string) => { success: boolean; message: string };
   fazerPropostaContratacao: (playerId: string) => { success: boolean; message: string };
+  negociarContratacao: (playerId: string, valorOferta: number, salarioOferta: number, forcarAceite?: boolean) => NegotiationResult;
   venderJogador: (playerId: string) => { success: boolean; message: string };
   renovarContrato: (playerId: string) => { success: boolean; message: string };
   dispensarJogador: (playerId: string) => { success: boolean; message: string };
@@ -112,6 +249,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   financialHistory: [],
   trainingPlan: { intensity: 'normal', focus: 'aim' },
   youthProspects: [],
+  historicoTemporadas: [],
 
   currentScreen: 'home',
   selectedPlayerId: null,
@@ -279,6 +417,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       ],
       financialHistory: [{ week: 1, description: 'Orçamento Inicial', amount: startingBudget }],
       youthProspects: [],
+      historicoTemporadas: [],
       currentScreen: 'dashboard',
       gameLoaded: true,
     });
@@ -287,7 +426,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   avancarSemana: () => {
-    const { currentWeek, userTeamId, teams, players, tournaments, historyNews, financialHistory, currentSeason, trainingPlan } = get();
+    const { currentWeek, userTeamId, teams, players, tournaments, historyNews, financialHistory, currentSeason, trainingPlan, historicoTemporadas } = get();
 
     // 1. Há partida de campeonato do usuário nesta semana? (bracket por rodadas — A5)
     // O adversário varia por rodada; o avanço/eliminação é tratado em finalizarPartidaAtiva.
@@ -475,6 +614,36 @@ export const useGameStore = create<GameState>((set, get) => ({
         }, ...historyNews]
       : [...sponsorExpiryNews, ...historyNews];
 
+    // 3b. PROPOSTA OCASIONAL DE IA por um jogador do usuário (não força a venda — só registra
+    // o interesse como notícia/oportunidade de mercado). ~15% de chance por semana.
+    const aiInterestNews: NewsItem[] = [];
+    if (Math.random() < 0.15) {
+      const venadeis = Object.values(updatedPlayers).filter(
+        (p) => p.teamId === userTeamId && (p.status === 'titular' || p.status === 'reserva')
+      );
+      if (venadeis.length > 0) {
+        const target = venadeis[Math.floor(Math.random() * venadeis.length)];
+        // Clube interessado: uma IA aleatória de tier igual ou superior (mais reputado).
+        const interestedTeams = Object.values(teams).filter(
+          (t) => t.id !== userTeamId && t.id !== 'free_agents' && t.tier <= updatedTeams[userTeamId].tier
+        );
+        const bidder = interestedTeams.length > 0
+          ? interestedTeams[Math.floor(Math.random() * interestedTeams.length)]
+          : null;
+        const bidValue = Math.round(target.value * (1.1 + Math.random() * 0.4)); // 110%–150% do valor
+        aiInterestNews.push({
+          id: `ai_bid_${currentSeason}_${currentWeek}_${target.id}`,
+          title: bidder
+            ? `${bidder.name} sonda a contratação de ${target.nickname}!`
+            : `Clubes do exterior sondam ${target.nickname}!`,
+          content: `${bidder ? `O ${bidder.name}` : 'Uma equipe internacional'} demonstrou interesse em ${target.nickname} (overall ${target.overall}) e teria oferecido cerca de $${bidValue.toLocaleString()} pelo passe. A diretoria do ${updatedTeams[userTeamId].name} não é obrigada a vender — avalie se é uma boa oportunidade de mercado na aba de Mercado/Elenco.`,
+          category: 'transfers',
+          week: currentWeek,
+          dateStr: `Semana ${currentWeek}`,
+        });
+      }
+    }
+
     // 4. SIMULAR PARTIDAS DE OUTRAS EQUIPES DE TORNEIOS DE FUNDO
     // (Simulações simplificadas para alimentar o ranking e notícias)
 
@@ -485,8 +654,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (nextWeek > 48) {
       const nextSeason = currentSeason + 1;
 
+      // 0. RESOLUÇÃO DE TORNEIOS PENDENTES (IA vs IA).
+      // Até aqui, só os torneios em que o usuário JOGOU foram resolvidos. Os torneios de
+      // fundo (em que o usuário não disputou) e os que ficaram sem campeão são fechados aqui,
+      // coroando uma IA via bracket de eliminação e premiando-a. Garante que TODO torneio
+      // termine a temporada com championId definido (objetivo da feature).
+      const activeMapsForBracket = realMaps.filter(m => m.status === 'active');
+      const resolvedTournaments: Record<string, Tournament> = { ...tournaments };
+      Object.values(tournaments).forEach((t) => {
+        if (t.championId && updatedTeams[t.championId]) return; // já tem campeão válido
+        const bracketMap = activeMapsForBracket[Math.floor(Math.random() * activeMapsForBracket.length)] ?? realMaps[0];
+        // Não excluímos ninguém: o usuário também pode ser coroado pela IA se for o mais forte
+        // num torneio que nunca disputou (ainda assim entra no bracket de fundo).
+        const aiOutcome = crownAiChampion(t, updatedTeams, updatedPlayers, null, bracketMap, currentWeek);
+        if (aiOutcome) {
+          updatedTeams[aiOutcome.championId] = aiOutcome.championTeam;
+          resolvedTournaments[t.id] = { ...t, isFinished: true, championId: aiOutcome.championId };
+        }
+      });
+
       // 1. SNAPSHOT DOS CAMPEÕES — capturado ANTES de qualquer reset de torneio.
-      const champions: SeasonChampionSnapshot[] = Object.values(tournaments)
+      const champions: SeasonChampionSnapshot[] = Object.values(resolvedTournaments)
         .filter(t => t.isFinished && t.championId && updatedTeams[t.championId])
         .map(t => {
           const champTeam = updatedTeams[t.championId as string];
@@ -574,15 +762,43 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
 
       // 5. SNAPSHOT DO RESUMO para a tela SeasonSummary (UI transiente).
+      const userStatsSnapshot = {
+        wins: updatedTeams[userTeamId]?.stats.wins ?? 0,
+        losses: updatedTeams[userTeamId]?.stats.losses ?? 0,
+        titles: updatedTeams[userTeamId]?.stats.titles ?? 0,
+      };
       const seasonSummary: SeasonSummary = {
         season: currentSeason,
         champions,
-        userStats: {
-          wins: updatedTeams[userTeamId]?.stats.wins ?? 0,
-          losses: updatedTeams[userTeamId]?.stats.losses ?? 0,
-          titles: updatedTeams[userTeamId]?.stats.titles ?? 0,
-        },
+        userStats: userStatsSnapshot,
       };
+
+      // 6. REGISTRO PERMANENTE NO HISTÓRICO — reaproveita o snapshot de campeões da temporada
+      // encerrada. Persistido no SaveGame (Histórico & Títulos). Forma enxuta: só os campos
+      // necessários para a sala de troféus e a lista de temporadas passadas.
+      // stats.wins/losses/titles do Team são ACUMULADOS de carreira. Para registrar o desempenho
+      // DESTA temporada, subtrai a soma das temporadas anteriores já no histórico (delta da temporada).
+      const prevTotals = historicoTemporadas
+        .filter(h => h.season !== currentSeason)
+        .reduce((acc, h) => ({ w: acc.w + h.userWins, l: acc.l + h.userLosses, t: acc.t + h.userTitles }), { w: 0, l: 0, t: 0 });
+      const seasonHistoryEntry: SeasonHistoryEntry = {
+        season: currentSeason,
+        champions: champions.map(c => ({
+          tournamentId: c.tournamentId,
+          tournamentName: c.tournamentName,
+          championId: c.championId,
+          championName: c.championName,
+          championTag: c.championTag,
+        })),
+        userWins: Math.max(0, userStatsSnapshot.wins - prevTotals.w),
+        userLosses: Math.max(0, userStatsSnapshot.losses - prevTotals.l),
+        userTitles: Math.max(0, userStatsSnapshot.titles - prevTotals.t),
+      };
+      // Evita duplicar a entrada se a virada de temporada for reprocessada (idempotência defensiva).
+      const updatedHistorico: SeasonHistoryEntry[] = [
+        ...historicoTemporadas.filter(h => h.season !== currentSeason),
+        seasonHistoryEntry,
+      ];
 
       set({
         currentWeek: 1,
@@ -591,8 +807,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         players: updatedPlayers,
         tournaments: resetTournaments,
         financialHistory: newFinEntry,
-        historyNews: [seasonEndNews, ...newsAfterWeek],
+        historyNews: [seasonEndNews, ...aiInterestNews, ...newsAfterWeek],
         seasonSummary,
+        historicoTemporadas: updatedHistorico,
         currentScreen: 'seasonSummary',
       });
 
@@ -606,7 +823,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       teams: updatedTeams,
       players: updatedPlayers,
       financialHistory: newFinEntry,
-      historyNews: newsAfterWeek,
+      historyNews: [...aiInterestNews, ...newsAfterWeek],
     });
 
     // Auto-save no avanço
@@ -738,6 +955,102 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     get().salvarJogo();
     return { success: true, message: `Contratação de ${player.nickname} concluída com sucesso!` };
+  },
+
+  negociarContratacao: (playerId, valorOferta, salarioOferta, forcarAceite = false) => {
+    const { players, teams, userTeamId, currentWeek } = get();
+    const player = players[playerId];
+    const userTeam = teams[userTeamId];
+
+    if (!player) {
+      return { success: false, status: 'recusada', message: 'Jogador não encontrado.' };
+    }
+    if (player.teamId === userTeamId) {
+      return { success: false, status: 'recusada', message: 'Jogador já faz parte da sua equipe.' };
+    }
+
+    // Saneamento: ofertas devem ser números finitos não-negativos.
+    const valor = Number.isFinite(valorOferta) ? Math.max(0, Math.round(valorOferta)) : 0;
+    const salario = Number.isFinite(salarioOferta) ? Math.max(0, Math.round(salarioOferta)) : 0;
+
+    // Custo de caixa para o usuário: passe oferecido + luvas (10% do passe).
+    const signingBonus = Math.round(valor * 0.1);
+    const totalCost = valor + signingBonus;
+    if (userTeam.budget < totalCost) {
+      return {
+        success: false,
+        status: 'recusada',
+        message: `Saldo insuficiente! A oferta exige $${totalCost.toLocaleString()} em caixa (Passe: $${valor.toLocaleString()} + Luvas: $${signingBonus.toLocaleString()}).`,
+      };
+    }
+
+    const oldTeamId = player.teamId;
+    const sellerTeam = oldTeamId !== 'free_agents' && teams[oldTeamId] ? teams[oldTeamId] : null;
+
+    // Ao ACEITAR uma contraproposta (forcarAceite), o clube/jogador já concordou com esses termos —
+    // não reavalia o interesse (evita o loop de gerar nova contraproposta). Só o caixa é validado (acima).
+    if (!forcarAceite) {
+      const evaluation = evaluateNegotiation(player, sellerTeam, userTeam.reputation, valor, salario);
+
+      if (evaluation.status === 'recusada') {
+        const motivo = sellerTeam
+          ? `O ${sellerTeam.name} considerou a proposta por ${player.nickname} muito abaixo do esperado e recusou as negociações.`
+          : `${player.nickname} recusou os termos oferecidos e seguirá no mercado.`;
+        return { success: false, status: 'recusada', message: motivo };
+      }
+
+      if (evaluation.status === 'contraproposta' && evaluation.contraproposta) {
+        const { valor: cValor, salario: cSalario } = evaluation.contraproposta;
+        const alvo = sellerTeam ? `O ${sellerTeam.name}` : `${player.nickname}`;
+        return {
+          success: false,
+          status: 'contraproposta',
+          contraproposta: evaluation.contraproposta,
+          message: `${alvo} apresentou uma contraproposta: passe de $${cValor.toLocaleString()} e salário semanal de $${cSalario.toLocaleString()}. Ajuste a oferta para fechar o acordo.`,
+        };
+      }
+    }
+
+    // ACEITA: efetiva a transferência de forma imutável (mesma lógica de fazerPropostaContratacao,
+    // porém com valor de passe e salário negociados).
+    const updatedTeams = { ...teams };
+    const updatedPlayers = { ...players };
+
+    updatedTeams[userTeamId] = { ...userTeam, budget: userTeam.budget - totalCost };
+
+    let oldTeamName = 'Agente Livre';
+    if (sellerTeam) {
+      updatedTeams[oldTeamId] = { ...sellerTeam, budget: sellerTeam.budget + valor };
+      oldTeamName = sellerTeam.name;
+    }
+
+    updatedPlayers[playerId] = {
+      ...player,
+      teamId: userTeamId,
+      status: 'reserva',
+      contractMonths: 18,
+      salary: salario,
+      value: Math.max(player.value, valor), // valorização: passe negociado vira o novo piso de mercado
+    };
+
+    const news = generateTransferNews(player, oldTeamName, userTeam.name, currentWeek);
+
+    set({
+      teams: updatedTeams,
+      players: updatedPlayers,
+      historyNews: [news, ...get().historyNews],
+      financialHistory: [
+        ...get().financialHistory,
+        { week: currentWeek, description: `Contratação negociada de ${player.nickname}`, amount: -totalCost },
+      ],
+    });
+
+    get().salvarJogo();
+    return {
+      success: true,
+      status: 'aceita',
+      message: `Acordo fechado! ${player.nickname} assinou com o ${userTeam.name} por um passe de $${valor.toLocaleString()} e salário semanal de $${salario.toLocaleString()}.`,
+    };
   },
 
   venderJogador: (playerId) => {
@@ -1341,8 +1654,16 @@ export const useGameStore = create<GameState>((set, get) => ({
           updatedT.weekScheduled = currentWeek + 1;
         }
       } else {
-        // Eliminado do campeonato
+        // Eliminado do campeonato: o usuário sai, mas o torneio CONTINUA entre as IAs.
+        // Simula o bracket restante (IA vs IA) e coroa um campeão real, premiando-o.
         updatedT.isFinished = true;
+        const bracketMap = realMaps.find(m => m.id === activeMatch.mapId) ?? realMaps[0];
+        const aiOutcome = crownAiChampion(updatedT, updatedTeams, get().players, userTeamId, bracketMap, currentWeek);
+        if (aiOutcome) {
+          updatedT.championId = aiOutcome.championId;
+          updatedTeams[aiOutcome.championId] = aiOutcome.championTeam;
+          championNews = aiOutcome.news;
+        }
       }
       updatedTournaments[activeMatch.competitionId] = updatedT;
     }
@@ -1394,7 +1715,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       historyNews,
       financialHistory,
       trainingPlan,
-      youthProspects
+      youthProspects,
+      historicoTemporadas
     } = get();
 
     const saveObj: SaveGame = {
@@ -1416,7 +1738,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       historyNews,
       financialHistory,
       trainingPlan,
-      youthProspects
+      youthProspects,
+      historicoTemporadas
     };
 
     localStorage.setItem(slot, JSON.stringify(saveObj));
@@ -1445,6 +1768,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         financialHistory: saveObj.financialHistory,
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         youthProspects: saveObj.youthProspects ?? [],
+        historicoTemporadas: saveObj.historicoTemporadas ?? [],
         currentScreen: 'dashboard',
         gameLoaded: true
       });
@@ -1471,7 +1795,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       historyNews,
       financialHistory,
       trainingPlan,
-      youthProspects
+      youthProspects,
+      historicoTemporadas
     } = get();
 
     const saveObj: SaveGame = {
@@ -1493,7 +1818,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       historyNews,
       financialHistory,
       trainingPlan,
-      youthProspects
+      youthProspects,
+      historicoTemporadas
     };
 
     return btoa(JSON.stringify(saveObj));
@@ -1520,6 +1846,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         financialHistory: saveObj.financialHistory,
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         youthProspects: saveObj.youthProspects ?? [],
+        historicoTemporadas: saveObj.historicoTemporadas ?? [],
         currentScreen: 'dashboard',
         gameLoaded: true
       });

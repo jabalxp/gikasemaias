@@ -10,11 +10,13 @@ import { Dashboard } from './pages/Dashboard';
 import { Squad } from './pages/Squad';
 import { Tactics } from './pages/Tactics';
 import { Training } from './pages/Training';
+import { Calendar } from './pages/Calendar';
 import { Staff } from './pages/Staff';
 import { Academy } from './pages/Academy';
 import { Market } from './pages/Market';
 import { Finances } from './pages/Finances';
 import { Rankings } from './pages/Rankings';
+import { History } from './pages/History';
 import { DataEditor } from './pages/DataEditor';
 import { Saves } from './pages/Saves';
 import { MatchSim } from './pages/MatchSim';
@@ -44,6 +46,8 @@ function App() {
         return <Tactics />;
       case 'training':
         return <Training />;
+      case 'calendar':
+        return <Calendar />;
       case 'staff':
         return <Staff />;
       case 'academy':
@@ -54,6 +58,8 @@ function App() {
         return <Finances />;
       case 'rankings':
         return <Rankings />;
+      case 'history':
+        return <History />;
       case 'dataEditor':
         return <DataEditor />;
       case 'saves':

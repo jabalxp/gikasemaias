@@ -13,7 +13,9 @@ import {
   Save,
   Dumbbell,
   UserCog,
-  GraduationCap
+  GraduationCap,
+  History,
+  CalendarDays
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -27,11 +29,13 @@ export const Sidebar: React.FC = () => {
     { id: 'squad', label: 'Gerenciar Elenco', icon: Users },
     { id: 'tactics', label: 'Táticas & Vetos', icon: Sliders },
     { id: 'training', label: 'Treino Semanal', icon: Dumbbell },
+    { id: 'calendar', label: 'Calendário', icon: CalendarDays },
     { id: 'staff', label: 'Comissão Técnica', icon: UserCog },
     { id: 'academy', label: 'Academia Base', icon: GraduationCap },
     { id: 'market', label: 'Mercado Pro', icon: ShoppingBag },
     { id: 'finances', label: 'Finanças & Sponsor', icon: DollarSign },
     { id: 'rankings', label: 'Rankings Mundiais', icon: TrendingUp },
+    { id: 'history', label: 'Histórico & Títulos', icon: History },
     { id: 'dataEditor', label: 'Editor de Dados', icon: BookOpen },
     { id: 'saves', label: 'Gerenciar Saves', icon: Save }
   ];
