@@ -44,6 +44,39 @@ export const getBuyType = (cash: number): 'eco' | 'force' | 'buy' => {
   return 'buy';
 };
 
+/**
+ * Modificador de poder do TIME para a partida (spec §26): combina maestria no mapa,
+ * forma recente, moral média e afinidade tática com o mapa. Aplicado como multiplicador
+ * no poder de cada jogador, de modo que mapa/moral/forma/tática importem — sem que o
+ * overall sozinho decida tudo. Faixa típica ~0.85 a ~1.30.
+ */
+export const computeTeamMod = (team: Team, players: Player[], map: GameMap): number => {
+  // Maestria no mapa (0-100) → 0.90 a 1.15
+  const mastery = team.mapMastery[map.id] ?? 50;
+  const masteryFactor = 0.90 + (mastery / 100) * 0.25;
+
+  // Forma recente (últimos 5 resultados) → ~0.94 a ~1.06
+  const recent = team.stats.recentForm.slice(-5);
+  const wins = recent.filter(r => r === 'W').length;
+  const formFactor = recent.length > 0 ? 1 + ((wins / recent.length) - 0.5) * 0.12 : 1;
+
+  // Moral média do elenco titular → 0.95 a 1.08
+  const avgMoral = players.length > 0 ? players.reduce((acc, p) => acc + p.moral, 0) / players.length : 75;
+  const moralFactor = 0.95 + (avgMoral / 100) * 0.13;
+
+  // Afinidade tática com o ritmo do mapa (leve): agressivo brilha em mapas rápidos; defensivo em lentos
+  let tacticFactor = 1.0;
+  const ps = team.tactics.playstyle;
+  if ((ps === 'aggressive' || ps === 'very_aggressive') && map.pace === 'fast') tacticFactor = 1.03;
+  else if ((ps === 'defensive' || ps === 'very_defensive') && map.pace === 'slow') tacticFactor = 1.03;
+
+  return masteryFactor * formFactor * moralFactor * tacticFactor;
+};
+
+// Condição individual do jogador (moral, forma e energia/cansaço) → ~0.90 a ~1.10
+const playerCondition = (p: Player): number =>
+  0.90 + (p.moral / 100) * 0.07 + (p.form / 100) * 0.07 + (p.energy / 100) * 0.06;
+
 // CLASH ENGINE: Resolve um duelo entre atacante e defensor
 // Fórmula Base: Vitória = (Mira do Atacante * Peso da Arma) + Fator Posicional + Bônus de Utilitária + Clutch + RNG
 const resolveClash = (
@@ -52,40 +85,39 @@ const resolveClash = (
   isPostPlant: boolean,
   map: GameMap,
   attackerWeaponWeight: number,
-  defenderWeaponWeight: number
+  defenderWeaponWeight: number,
+  attackerTeamMod: number,
+  defenderTeamMod: number
 ): { winner: 'attacker' | 'defender'; damage: number } => {
-  
-  // Atributos base
-  const attAim = attacker.player.attributes.aim;
-  const attGs = attacker.player.attributes.gamesense;
-  const attUt = attacker.player.attributes.utility;
-  
-  const defAim = defender.player.attributes.aim;
-  const defGs = defender.player.attributes.gamesense;
-  const defUt = defender.player.attributes.utility;
 
-  // Fator posicional (ex: defensores ganham pequeno bônus)
+  const a = attacker.player;
+  const d = defender.player;
+
+  // Fator posicional (defensores ganham pequeno bônus)
   const attackerPosFactor = attacker.side === 'CT' ? 1.05 : 1.0;
   const defenderPosFactor = defender.side === 'CT' ? 1.10 : 1.0;
 
-  // Bônus de utilitária
-  const attUtilityBonus = attUt * 0.15 + (map.utilityRequirement * 0.05);
-  const defUtilityBonus = defUt * 0.15 + (map.utilityRequirement * 0.05);
+  // Bônus de utilitária e clutch (este só no pós-plant)
+  const attUtilityBonus = a.attributes.utility * 0.15 + (map.utilityRequirement * 0.05);
+  const defUtilityBonus = d.attributes.utility * 0.15 + (map.utilityRequirement * 0.05);
+  const attClutchBonus = isPostPlant ? a.attributes.clutch * 0.25 : 0;
+  const defClutchBonus = isPostPlant ? d.attributes.clutch * 0.25 : 0;
 
-  // Fator Clutch no pós-plant
-  const attClutchBonus = isPostPlant ? attacker.player.attributes.clutch * 0.25 : 0;
-  const defClutchBonus = isPostPlant ? defender.player.attributes.clutch * 0.25 : 0;
+  // Poder bruto: mira (com peso de arma e posição) + gamesense + OVERALL geral + utilitárias + clutch.
+  // Em seguida modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do TIME
+  // (mapMastery/forma/moral/tática). RNG controlado (1-28) preserva zebras sem aleatoriedade excessiva.
+  let attPower = (a.attributes.aim * attackerWeaponWeight * attackerPosFactor)
+    + (a.attributes.gamesense * 0.1) + (a.overall * 0.3) + attUtilityBonus + attClutchBonus;
+  attPower = attPower * playerCondition(a) * attackerTeamMod + randomRange(1, 28);
 
-  // Cálculos de poder
-  const attPower = (attAim * attackerWeaponWeight * attackerPosFactor) + (attGs * 0.1) + attUtilityBonus + attClutchBonus + randomRange(1, 40);
-  const defPower = (defAim * defenderWeaponWeight * defenderPosFactor) + (defGs * 0.1) + defUtilityBonus + defClutchBonus + randomRange(1, 40);
+  let defPower = (d.attributes.aim * defenderWeaponWeight * defenderPosFactor)
+    + (d.attributes.gamesense * 0.1) + (d.overall * 0.3) + defUtilityBonus + defClutchBonus;
+  defPower = defPower * playerCondition(d) * defenderTeamMod + randomRange(1, 28);
 
   const winner = attPower >= defPower ? 'attacker' : 'defender';
-  const damage = winner === 'attacker' ? randomRange(40, 100) : randomRange(40, 100);
-
   return {
     winner,
-    damage: Math.round(damage)
+    damage: Math.round(randomRange(40, 100))
   };
 };
 
@@ -110,6 +142,23 @@ export const simulateRound = (
   const livePlayersA = playersA.filter(p => p.status === 'titular');
   const livePlayersB = playersB.filter(p => p.status === 'titular');
 
+  // Fail-safe: se um dos times não tem titulares, o round é concedido ao outro.
+  // Evita crashes de Math.max(...[]) (-Infinity) e randomChoice([]) (undefined) — cobre os
+  // cenários em que um adversário não foi preenchido com elenco.
+  if (livePlayersA.length === 0 || livePlayersB.length === 0) {
+    const winnerId = livePlayersA.length === 0 ? teamB.id : teamA.id;
+    const winningSide = winnerId === teamA.id ? sides.teamA : sides.teamB;
+    return {
+      roundNumber,
+      winningTeamSide: winningSide,
+      winningTeamId: winnerId,
+      winReason: 'elimination',
+      events: [{ time: '0:00', description: 'Time sem jogadores suficientes — round concedido por W.O.', type: 'tactical' }],
+      economyBefore: { teamA: 'eco', teamB: 'eco' },
+      cashAft: {},
+    };
+  }
+
   // Reset do HP e status de sobrevivência no início do round
   const allLivePlayers = [...livePlayersA, ...livePlayersB];
   allLivePlayers.forEach(p => {
@@ -118,6 +167,10 @@ export const simulateRound = (
     stats.hp = 100;
     stats.hasC4 = false;
   });
+
+  // Snapshot de kills antes do round, para pagar o bônus econômico pelos kills REAIS do round
+  const killsBeforeRound: Record<string, number> = {};
+  allLivePlayers.forEach(p => { killsBeforeRound[p.id] = liveStats[p.id].kills; });
 
   // 1. FASE DE COMPRA (Freeze Time)
   const buyTypeA = getBuyType(Math.max(...livePlayersA.map(p => liveStats[p.id].cash)));
@@ -166,6 +219,12 @@ export const simulateRound = (
   const playersTR = sides.teamA === 'TR' ? livePlayersA : livePlayersB;
   const playersCT = sides.teamA === 'CT' ? livePlayersA : livePlayersB;
 
+  // Modificadores de time (mapMastery/forma/moral/tática) aplicados em cada duelo (spec §26)
+  const modA = computeTeamMod(teamA, livePlayersA, map);
+  const modB = computeTeamMod(teamB, livePlayersB, map);
+  const modTR = sides.teamA === 'TR' ? modA : modB;
+  const modCT = sides.teamA === 'CT' ? modA : modB;
+
   // Equipar C4 no TR de maior Utility/Gamesense
   const carrier = randomChoice(playersTR);
   liveStats[carrier.id].hasC4 = true;
@@ -196,7 +255,9 @@ export const simulateRound = (
     false,
     map,
     trWWeight,
-    ctWWeight
+    ctWWeight,
+    modTR,
+    modCT
   );
 
   if (fbDuelo.winner === 'attacker') {
@@ -279,7 +340,9 @@ export const simulateRound = (
         true,
         map,
         dWeightTR,
-        dWeightCT
+        dWeightCT,
+        modTR,
+        modCT
       );
 
       if (duelo.winner === 'attacker') {
@@ -373,7 +436,9 @@ export const simulateRound = (
         false,
         map,
         dWeightTR,
-        dWeightCT
+        dWeightCT,
+        modTR,
+        modCT
       );
 
       if (duelo.winner === 'attacker') {
@@ -450,7 +515,10 @@ export const simulateRound = (
       }
     }
   });
-  if (!roundMvpId) roundMvpId = randomChoice(allLivePlayers.filter(p => p.teamId === roundWinnerId)).id;
+  if (!roundMvpId) {
+    const winners = allLivePlayers.filter(p => p.teamId === roundWinnerId);
+    roundMvpId = winners.length > 0 ? randomChoice(winners).id : (allLivePlayers[0]?.id ?? '');
+  }
 
   const mvpNick = allLivePlayers.find(p => p.id === roundMvpId)?.nickname ?? 'Jogador';
   events.push({
@@ -495,10 +563,9 @@ export const simulateRound = (
         }
       }
 
-      // Adiciona bônus individual por kill ($300)
-      // (aqui simplificado por round, cada kill dá $300)
-      const killsInRound = stats.alive ? Math.min(5, randomRange(0, 2)) : 0; // estimativa simplificada
-      bonus += Math.floor(killsInRound) * 300;
+      // Bônus individual de $300 por kill REAL feito neste round (coerente com o feed de eventos)
+      const killsInRound = Math.max(0, stats.kills - (killsBeforeRound[p.id] ?? stats.kills));
+      bonus += killsInRound * 300;
 
       stats.cash = Math.min(MAX_CASH, stats.cash + bonus);
     });
@@ -571,10 +638,10 @@ export const simulateWholeMatchQuick = (
       lossStreakB = 0;
     }
 
-    // Overtime (12-12)
-    if (scoreA === 12 && scoreB === 12 && currentRound === 25) {
-      halfScores.push({ scoreA, scoreB });
-      // Inicia overtime com $10,000 para cada
+    // Início de CADA período de overtime (rounds 25, 31, 37...): MR3 com pistola "rica" ($10k).
+    // Antes só o 1º OT resetava a economia; empates sucessivos (15-15, 18-18) ficavam sem reset.
+    if (currentRound >= 25 && (currentRound - 25) % 6 === 0) {
+      if (currentRound === 25) halfScores.push({ scoreA, scoreB });
       activePlayersA.forEach(p => { liveStats[p.id].cash = 10000; });
       activePlayersB.forEach(p => { liveStats[p.id].cash = 10000; });
       sides = { teamA: 'CT', teamB: 'TR' };
@@ -635,20 +702,22 @@ export const simulateWholeMatchQuick = (
     currentRound++;
   }
 
-  // Eleger MVP Geral do Confronto (Quem teve mais pontuação de impacto/abates acumulados)
+  // Eleger MVP Geral do Confronto. Favorece o time VENCEDOR (bônus de impacto): um carry
+  // do time perdedor só leva o MVP se tiver kills bem superiores.
+  const matchWinnerId = scoreA > scoreB ? teamA.id : teamB.id;
   let mvpPlayerId = '';
-  let highestKillsTotal = -1;
+  let highestScore = -1;
   const allPlayers = [...activePlayersA, ...activePlayersB];
   allPlayers.forEach(p => {
-    const k = liveStats[p.id].kills;
-    if (k > highestKillsTotal) {
-      highestKillsTotal = k;
+    const score = liveStats[p.id].kills + (p.teamId === matchWinnerId ? 6 : 0);
+    if (score > highestScore) {
+      highestScore = score;
       mvpPlayerId = p.id;
     }
   });
 
   return {
-    id: Math.random().toString(36).substr(2, 9),
+    id: `match_${Math.random().toString(36).slice(2, 11)}`,
     teamAId: teamA.id,
     teamBId: teamB.id,
     competitionId,

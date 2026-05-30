@@ -1,0 +1,190 @@
+- generic [ref=e3]:
+  - complementary [ref=e321]:
+    - generic [ref=e322]:
+      - generic [ref=e323]:
+        - img [ref=e325]
+        - generic [ref=e328]:
+          - heading "PROSTRIKE" [level=1] [ref=e329]
+          - text: MANAGER
+      - navigation [ref=e330]:
+        - button "Painel Principal" [ref=e331]:
+          - img [ref=e332]
+          - generic [ref=e337]: Painel Principal
+        - button "Gerenciar Elenco" [ref=e338]:
+          - img [ref=e339]
+          - generic [ref=e344]: Gerenciar Elenco
+        - button "Táticas & Vetos" [active] [ref=e345]:
+          - img [ref=e346]
+          - generic [ref=e347]: Táticas & Vetos
+        - button "Treino Semanal" [ref=e348]:
+          - img [ref=e349]
+          - generic [ref=e355]: Treino Semanal
+        - button "Mercado Pro" [ref=e356]:
+          - img [ref=e357]
+          - generic [ref=e360]: Mercado Pro
+        - button "Finanças & Sponsor" [ref=e361]:
+          - img [ref=e362]
+          - generic [ref=e364]: Finanças & Sponsor
+        - button "Rankings Mundiais" [ref=e365]:
+          - img [ref=e366]
+          - generic [ref=e369]: Rankings Mundiais
+        - button "Editor de Dados" [ref=e370]:
+          - img [ref=e371]
+          - generic [ref=e373]: Editor de Dados
+        - button "Gerenciar Saves" [ref=e374]:
+          - img [ref=e375]
+          - generic [ref=e379]: Gerenciar Saves
+    - generic [ref=e381]:
+      - generic [ref=e382]: FU
+      - generic [ref=e383]:
+        - paragraph [ref=e384]: FURIA
+        - generic [ref=e385]: "Tier 1 • #730 pts"
+  - main [ref=e386]:
+    - generic [ref=e387]:
+      - generic [ref=e388]:
+        - generic [ref=e389]:
+          - img [ref=e391]
+          - generic [ref=e393]:
+            - paragraph [ref=e394]: Calendário
+            - paragraph [ref=e395]: Temporada 1 • Sem 12
+        - generic [ref=e396]:
+          - img [ref=e398]
+          - generic [ref=e401]:
+            - paragraph [ref=e402]: Caixa / Saldo
+            - paragraph [ref=e403]: $207.400
+        - generic [ref=e404]:
+          - img [ref=e406]
+          - generic [ref=e409]:
+            - paragraph [ref=e410]: Reputação
+            - paragraph [ref=e411]: 88/100
+      - button "Avançar Semana" [ref=e413]:
+        - img [ref=e414]
+        - generic [ref=e417]: Avançar Semana
+    - generic [ref=e503]:
+      - generic [ref=e504]:
+        - heading "SISTEMA TÁTICO & VETOS" [level=2] [ref=e505]
+        - paragraph [ref=e506]: Defina o estilo de jogo e simule o ban/pick de mapas baseado na sua maestria.
+      - generic [ref=e507]:
+        - generic [ref=e508]:
+          - heading "Configurações Táticas" [level=3] [ref=e509]:
+            - img [ref=e510]
+            - generic [ref=e511]: Configurações Táticas
+          - generic [ref=e512]:
+            - generic [ref=e513]:
+              - generic [ref=e514]: Estilo de Jogo
+              - combobox [ref=e515]:
+                - option "Muito Agressivo" [selected]
+                - option "Agressivo"
+                - option "Equilibrado / Flexível"
+                - option "Defensivo"
+                - option "Muito Defensivo"
+            - generic [ref=e516]:
+              - generic [ref=e517]: Ritmo de Jogo
+              - combobox [ref=e518]:
+                - option "Explosivo (Rápido / Entrada Seca)"
+                - option "Rápido (Avanço / Busca Pickoff)" [selected]
+                - option "Normal (Default)"
+                - option "Lento (Trabalho de Round / Execuções de Fim)"
+            - generic [ref=e519]:
+              - generic [ref=e520]: Foco Tático Principal
+              - combobox [ref=e521]:
+                - option "Default / Controle de Mapa Neutro"
+                - option "Domínio Territorial e Avanços" [selected]
+                - option "Execução Completa nos Bombs"
+                - option "Picks de AWP e Isolamento"
+                - option "Retake de C4 Coordenado"
+                - option "Controle Rígido do Meio"
+            - generic [ref=e522]:
+              - generic [ref=e523]: Uso de Utilitários
+              - combobox [ref=e524]:
+                - option "Baixo (Duelos Físicos)"
+                - option "Médio (Flashs de Entrada)"
+                - option "Alto (Esmolas, Smokes & Molotovs)" [selected]
+                - option "Muito Alto (Execuções Milimétricas)"
+            - generic [ref=e525]:
+              - generic [ref=e526]: Gestão Econômica
+              - combobox [ref=e527]:
+                - option "Econômica (Poupa para Full Buys)"
+                - option "Equilibrada (Default)" [selected]
+                - option "Forçada (Pressão Constante)"
+                - option "Agressiva (Compra Sempre)"
+          - button "Aplicar Configurações Táticas" [ref=e528]
+        - generic [ref=e529]:
+          - heading "Simulador de Vetos (Beto)" [level=3] [ref=e530]:
+            - img [ref=e531]
+            - generic [ref=e533]: Simulador de Vetos (Beto)
+          - generic [ref=e534]:
+            - generic [ref=e535]:
+              - generic [ref=e536]:
+                - generic [ref=e537]: Formato
+                - combobox [ref=e538]:
+                  - option "MD1 (1 Mapa)" [selected]
+                  - option "MD3 (3 Mapas)"
+                  - option "MD5 (5 Mapas)"
+              - generic [ref=e539]:
+                - generic [ref=e540]: Oponente
+                - combobox [ref=e541]:
+                  - option "paiN Gaming" [selected]
+                  - option "MIBR"
+                  - option "Imperial Esports"
+                  - option "Legacy"
+                  - option "Fluxo"
+                  - option "RED Canids"
+                  - option "Sharks Esports"
+                  - option "ODDIK"
+                  - option "BESTIA"
+                  - option "9z Team"
+                  - option "Case Esports"
+                  - option "w7m esports"
+                  - option "Hype"
+                  - option "Galorys"
+                  - option "Team Solid"
+                  - option "Bounty Hunters"
+                  - option "Players"
+                  - option "Corinthians Esports"
+                  - option "Flamengo Esports"
+                  - option "LOUD"
+                  - option "Team Vitality"
+                  - option "Natus Vincere"
+                  - option "FaZe Clan"
+                  - option "Team Spirit"
+                  - option "G2 Esports"
+                  - option "MOUZ"
+                  - option "Team Falcons"
+                  - option "Team Liquid"
+                  - option "Complexity Gaming"
+                  - option "Astralis"
+                  - option "Virtus.pro"
+                  - option "HEROIC"
+                  - option "Ninjas in Pyjamas"
+                  - option "Fnatic"
+                  - option "BIG"
+                  - option "ENCE"
+                  - option "Cloud9"
+                  - option "GamerLegion"
+                  - option "SAW"
+                  - option "The MongolZ"
+                  - option "Aurora Gaming"
+                  - option "BetBoom Team"
+                  - option "3DMAX"
+                  - option "B8"
+                  - option "Eternal Fire"
+                  - option "Monte"
+                  - option "Apeks"
+                  - option "OG Esports"
+                  - option "TSM"
+                  - option "PARIVISION"
+                  - option "Sangal Esports"
+                  - option "M80"
+                  - option "FlyQuest"
+                  - option "Lynn Vision Gaming"
+                  - option "TYLOO"
+                  - option "Rare Atom"
+                  - option "Grayhound"
+                  - option "NRG Esports"
+                  - option "Wildcard Gaming"
+                  - option "MASONIC"
+                  - option "ECSTATIC"
+                  - option "Sprout"
+                  - option "Copenhagen Wolves"
+            - button "Simular Veto de Mapas" [ref=e542]

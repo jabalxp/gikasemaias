@@ -12,6 +12,11 @@ export const Squad: React.FC = () => {
 
   const handleStatusChange = (id: string, currentStatus: string) => {
     const nextStatus = currentStatus === 'titular' ? 'reserva' : 'titular';
+    // Feedback explícito ao tentar escalar com o time já cheio (antes o store negava em silêncio)
+    if (nextStatus === 'titular' && titulares.length >= 5) {
+      alert('Você já tem 5 titulares escalados. Reserve um jogador antes de escalar outro.');
+      return;
+    }
     definirTitular(id, nextStatus);
   };
 

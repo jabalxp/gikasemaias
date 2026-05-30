@@ -1,0 +1,16 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]: v1.0.0 Stable MVP
+    - button "Resetar Base de Dados" [ref=e6]:
+      - img [ref=e7]
+      - generic [ref=e10]: Resetar Base de Dados
+  - generic [ref=e11]:
+    - img [ref=e13]
+    - heading "PROSTRIKE MANAGER" [level=1] [ref=e15]
+    - paragraph [ref=e16]: Gerencie jogadores reais do cenário competitivo de CS, crie estratégias táticas de alto nível, assine patrocínios lucrativos e simule partidas round a round rumo ao topo mundial.
+    - generic [ref=e17]:
+      - button "NOVO JOGO / CARREIRA" [ref=e18]:
+        - generic [ref=e19]: NOVO JOGO / CARREIRA
+      - generic [ref=e20]: NENHUM SAVE LOCAL ENCONTRADO
+      - button "IMPORTAR SAVE JSON" [ref=e21]
+  - paragraph [ref=e23]: Desenvolvido para Estudo, Protótipo & Diversão Pessoal. 2026.

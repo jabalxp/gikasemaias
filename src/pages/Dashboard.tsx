@@ -11,12 +11,18 @@ export const Dashboard: React.FC = () => {
     historyNews,
     currentWeek,
     setScreen,
-    avancarSemana
+    iniciarPartidaContra
   } = useGameStore();
 
   const userTeam = teams[userTeamId];
 
-  if (!userTeam) return null;
+  if (!userTeam) {
+    return (
+      <div className="flex items-center justify-center h-64 text-sm font-semibold text-slate-400">
+        Carregando carreira…
+      </div>
+    );
+  }
 
   // Encontra o próximo adversário (placeholder simples baseado em times reais)
   const allOpponents = Object.values(teams).filter(t => t.id !== userTeamId);
@@ -102,7 +108,7 @@ export const Dashboard: React.FC = () => {
           </div>
 
           <button
-            onClick={() => avancarSemana()}
+            onClick={() => iniciarPartidaContra(nextOpponent.id)}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-extrabold bg-gradient-to-r from-brand-cyan to-brand-purple text-brand-dark hover:scale-102 hover:shadow-md hover:shadow-brand-cyan/20 active:scale-98 transition-all duration-300"
           >
             <Play className="w-4 h-4 fill-brand-dark" />

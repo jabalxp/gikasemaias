@@ -1,0 +1,328 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e11]:
+          - heading "PROSTRIKE" [level=1] [ref=e12]
+          - text: MANAGER
+      - navigation [ref=e13]:
+        - button "Painel Principal" [ref=e14]:
+          - img [ref=e15]
+          - generic [ref=e20]: Painel Principal
+        - button "Gerenciar Elenco" [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e27]: Gerenciar Elenco
+        - button "Táticas & Vetos" [ref=e28]:
+          - img [ref=e29]
+          - generic [ref=e30]: Táticas & Vetos
+        - button "Treino Semanal" [ref=e31]:
+          - img [ref=e32]
+          - generic [ref=e38]: Treino Semanal
+        - button "Mercado Pro" [ref=e39]:
+          - img [ref=e40]
+          - generic [ref=e43]: Mercado Pro
+        - button "Finanças & Sponsor" [active] [ref=e44]:
+          - img [ref=e45]
+          - generic [ref=e47]: Finanças & Sponsor
+        - button "Rankings Mundiais" [ref=e48]:
+          - img [ref=e49]
+          - generic [ref=e52]: Rankings Mundiais
+        - button "Editor de Dados" [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: Editor de Dados
+        - button "Gerenciar Saves" [ref=e57]:
+          - img [ref=e58]
+          - generic [ref=e62]: Gerenciar Saves
+    - generic [ref=e64]:
+      - generic [ref=e65]: FU
+      - generic [ref=e66]:
+        - paragraph [ref=e67]: FURIA
+        - generic [ref=e68]: "Tier 1 • #730 pts"
+  - main [ref=e69]:
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - img [ref=e74]
+          - generic [ref=e76]:
+            - paragraph [ref=e77]: Calendário
+            - paragraph [ref=e78]: Temporada 1 • Sem 12
+        - generic [ref=e79]:
+          - img [ref=e81]
+          - generic [ref=e84]:
+            - paragraph [ref=e85]: Caixa / Saldo
+            - paragraph [ref=e86]: $-83.000
+        - generic [ref=e87]:
+          - img [ref=e89]
+          - generic [ref=e92]:
+            - paragraph [ref=e93]: Reputação
+            - paragraph [ref=e94]: 88/100
+      - generic [ref=e95]:
+        - button "Jogar Partida / Avançar" [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Jogar Partida / Avançar
+        - button "Apenas Avançar" [ref=e100]:
+          - img [ref=e101]
+          - generic [ref=e104]: Apenas Avançar
+    - generic [ref=e1782]:
+      - generic [ref=e1783]:
+        - generic [ref=e1784]:
+          - heading "Finanças & Quadro de Patrocínios" [level=2] [ref=e1785]:
+            - img [ref=e1786]
+            - generic [ref=e1788]: Finanças & Quadro de Patrocínios
+          - paragraph [ref=e1789]: Acompanhe a folha salarial da comissão técnica e assine contratos lucrativos de patrocínio com base na reputação do seu time.
+        - generic [ref=e1790]:
+          - generic [ref=e1791]: Seu Caixa
+          - generic [ref=e1792]: $-83.000
+      - generic [ref=e1793]:
+        - generic [ref=e1795]:
+          - heading "Extrato de Transações" [level=3] [ref=e1796]:
+            - img [ref=e1797]
+            - generic [ref=e1800]: Extrato de Transações
+          - generic [ref=e1801]:
+            - generic [ref=e1802]:
+              - generic [ref=e1803]:
+                - paragraph [ref=e1804]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1805]: Semana 11
+              - generic [ref=e1806]: "-$53.000"
+            - generic [ref=e1807]:
+              - generic [ref=e1808]:
+                - paragraph [ref=e1809]: Patrocínio Semanal
+                - generic [ref=e1810]: Semana 11
+              - generic [ref=e1811]: +$0
+            - generic [ref=e1812]:
+              - generic [ref=e1813]:
+                - paragraph [ref=e1814]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1815]: Semana 10
+              - generic [ref=e1816]: "-$53.000"
+            - generic [ref=e1817]:
+              - generic [ref=e1818]:
+                - paragraph [ref=e1819]: Patrocínio Semanal
+                - generic [ref=e1820]: Semana 10
+              - generic [ref=e1821]: +$0
+            - generic [ref=e1822]:
+              - generic [ref=e1823]:
+                - paragraph [ref=e1824]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1825]: Semana 9
+              - generic [ref=e1826]: "-$53.000"
+            - generic [ref=e1827]:
+              - generic [ref=e1828]:
+                - paragraph [ref=e1829]: Patrocínio Semanal
+                - generic [ref=e1830]: Semana 9
+              - generic [ref=e1831]: +$0
+            - generic [ref=e1832]:
+              - generic [ref=e1833]:
+                - paragraph [ref=e1834]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1835]: Semana 8
+              - generic [ref=e1836]: "-$53.000"
+            - generic [ref=e1837]:
+              - generic [ref=e1838]:
+                - paragraph [ref=e1839]: Patrocínio Semanal
+                - generic [ref=e1840]: Semana 8
+              - generic [ref=e1841]: +$0
+            - generic [ref=e1842]:
+              - generic [ref=e1843]:
+                - paragraph [ref=e1844]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1845]: Semana 7
+              - generic [ref=e1846]: "-$53.000"
+            - generic [ref=e1847]:
+              - generic [ref=e1848]:
+                - paragraph [ref=e1849]: Patrocínio Semanal
+                - generic [ref=e1850]: Semana 7
+              - generic [ref=e1851]: +$0
+            - generic [ref=e1852]:
+              - generic [ref=e1853]:
+                - paragraph [ref=e1854]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1855]: Semana 6
+              - generic [ref=e1856]: "-$53.000"
+            - generic [ref=e1857]:
+              - generic [ref=e1858]:
+                - paragraph [ref=e1859]: Patrocínio Semanal
+                - generic [ref=e1860]: Semana 6
+              - generic [ref=e1861]: +$0
+            - generic [ref=e1862]:
+              - generic [ref=e1863]:
+                - paragraph [ref=e1864]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1865]: Semana 5
+              - generic [ref=e1866]: "-$53.000"
+            - generic [ref=e1867]:
+              - generic [ref=e1868]:
+                - paragraph [ref=e1869]: Patrocínio Semanal
+                - generic [ref=e1870]: Semana 5
+              - generic [ref=e1871]: +$0
+            - generic [ref=e1872]:
+              - generic [ref=e1873]:
+                - paragraph [ref=e1874]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1875]: Semana 4
+              - generic [ref=e1876]: "-$53.000"
+            - generic [ref=e1877]:
+              - generic [ref=e1878]:
+                - paragraph [ref=e1879]: Patrocínio Semanal
+                - generic [ref=e1880]: Semana 4
+              - generic [ref=e1881]: +$0
+            - generic [ref=e1882]:
+              - generic [ref=e1883]:
+                - paragraph [ref=e1884]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1885]: Semana 3
+              - generic [ref=e1886]: "-$53.000"
+            - generic [ref=e1887]:
+              - generic [ref=e1888]:
+                - paragraph [ref=e1889]: Patrocínio Semanal
+                - generic [ref=e1890]: Semana 3
+              - generic [ref=e1891]: +$0
+            - generic [ref=e1892]:
+              - generic [ref=e1893]:
+                - paragraph [ref=e1894]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1895]: Semana 2
+              - generic [ref=e1896]: "-$53.000"
+            - generic [ref=e1897]:
+              - generic [ref=e1898]:
+                - paragraph [ref=e1899]: Patrocínio Semanal
+                - generic [ref=e1900]: Semana 2
+              - generic [ref=e1901]: +$0
+            - generic [ref=e1902]:
+              - generic [ref=e1903]:
+                - paragraph [ref=e1904]: Folha Salarial de Jogadores e Staff
+                - generic [ref=e1905]: Semana 1
+              - generic [ref=e1906]: "-$53.000"
+            - generic [ref=e1907]:
+              - generic [ref=e1908]:
+                - paragraph [ref=e1909]: Patrocínio Semanal
+                - generic [ref=e1910]: Semana 1
+              - generic [ref=e1911]: +$0
+            - generic [ref=e1912]:
+              - generic [ref=e1913]:
+                - paragraph [ref=e1914]: Orçamento Inicial
+                - generic [ref=e1915]: Semana 1
+              - generic [ref=e1916]: +$500.000
+        - generic [ref=e1917]:
+          - heading "Patrocinadores Disponíveis" [level=3] [ref=e1918]:
+            - img [ref=e1919]
+            - generic [ref=e1922]: Patrocinadores Disponíveis
+          - generic [ref=e1923]:
+            - generic [ref=e1924]:
+              - generic [ref=e1925]:
+                - paragraph [ref=e1927]: HyperCore Gear
+                - paragraph [ref=e1928]: Reputação mínima de 60. Exige permanência no Tier 3 ou superior.
+                - generic [ref=e1929]:
+                  - generic [ref=e1930]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e1931]: $12.000
+                  - generic [ref=e1932]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e1933]: $800
+                  - generic [ref=e1934]:
+                    - text: "Duração:"
+                    - generic [ref=e1935]: 12 sem
+                  - generic [ref=e1936]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e1937]: 60 pts
+              - button "Assinar Patrocínio" [ref=e1938]
+            - generic [ref=e1939]:
+              - generic [ref=e1940]:
+                - paragraph [ref=e1942]: AimLabz Simulator
+                - paragraph [ref=e1943]: Reputação mínima de 40. Ideal para equipes em crescimento.
+                - generic [ref=e1944]:
+                  - generic [ref=e1945]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e1946]: $8.000
+                  - generic [ref=e1947]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e1948]: $500
+                  - generic [ref=e1949]:
+                    - text: "Duração:"
+                    - generic [ref=e1950]: 8 sem
+                  - generic [ref=e1951]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e1952]: 40 pts
+              - button "Assinar Patrocínio" [ref=e1953]
+            - generic [ref=e1954]:
+              - generic [ref=e1955]:
+                - paragraph [ref=e1957]: Nitrus Energy Drink
+                - paragraph [ref=e1958]: Reputação mínima de 75. Exige pelo menos 1 jogador estrela (Overall > 82) no elenco titular.
+                - generic [ref=e1959]:
+                  - generic [ref=e1960]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e1961]: $15.000
+                  - generic [ref=e1962]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e1963]: $1.000
+                  - generic [ref=e1964]:
+                    - text: "Duração:"
+                    - generic [ref=e1965]: 16 sem
+                  - generic [ref=e1966]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e1967]: 75 pts
+              - button "Assinar Patrocínio" [ref=e1968]
+            - generic [ref=e1969]:
+              - generic [ref=e1970]:
+                - paragraph [ref=e1972]: ByteForce Computers
+                - paragraph [ref=e1973]: Reputação mínima de 85. Contrato de elite para organizações consolidadas de Tier 1.
+                - generic [ref=e1974]:
+                  - generic [ref=e1975]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e1976]: $22.000
+                  - generic [ref=e1977]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e1978]: $1.500
+                  - generic [ref=e1979]:
+                    - text: "Duração:"
+                    - generic [ref=e1980]: 24 sem
+                  - generic [ref=e1981]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e1982]: 85 pts
+              - button "Assinar Patrocínio" [ref=e1983]
+            - generic [ref=e1984]:
+              - generic [ref=e1985]:
+                - paragraph [ref=e1987]: NeonBank Digital
+                - paragraph [ref=e1988]: Reputação mínima de 80. Pagamentos rápidos com bônus expressivos.
+                - generic [ref=e1989]:
+                  - generic [ref=e1990]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e1991]: $18.000
+                  - generic [ref=e1992]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e1993]: $1.200
+                  - generic [ref=e1994]:
+                    - text: "Duração:"
+                    - generic [ref=e1995]: 12 sem
+                  - generic [ref=e1996]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e1997]: 80 pts
+              - button "Assinar Patrocínio" [ref=e1998]
+            - generic [ref=e1999]:
+              - generic [ref=e2000]:
+                - paragraph [ref=e2002]: ClutchWear Apparel
+                - paragraph [ref=e2003]: Reputação mínima de 20. Excelente para iniciantes ou times de divisão de base.
+                - generic [ref=e2004]:
+                  - generic [ref=e2005]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e2006]: $6.000
+                  - generic [ref=e2007]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e2008]: $400
+                  - generic [ref=e2009]:
+                    - text: "Duração:"
+                    - generic [ref=e2010]: 6 sem
+                  - generic [ref=e2011]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e2012]: 20 pts
+              - button "Assinar Patrocínio" [ref=e2013]
+            - generic [ref=e2014]:
+              - generic [ref=e2015]:
+                - paragraph [ref=e2017]: UltraGear Monitors
+                - paragraph [ref=e2018]: Reputação mínima de 50. Foco em estabilidade financeira a médio prazo.
+                - generic [ref=e2019]:
+                  - generic [ref=e2020]:
+                    - text: "Ganho Semanal:"
+                    - generic [ref=e2021]: $10.000
+                  - generic [ref=e2022]:
+                    - text: "Bônus Vitória:"
+                    - generic [ref=e2023]: $600
+                  - generic [ref=e2024]:
+                    - text: "Duração:"
+                    - generic [ref=e2025]: 10 sem
+                  - generic [ref=e2026]:
+                    - text: "Exigência Rep:"
+                    - generic [ref=e2027]: 50 pts
+              - button "Assinar Patrocínio" [ref=e2028]

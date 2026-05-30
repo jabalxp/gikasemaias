@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Match, Player, SaveGame, Sponsor, Staff, Team, Tournament, GameMap } from '../types';
+import { Match, Player, SaveGame, Sponsor, Staff, Team, Tournament, GameMap, NewsItem } from '../types';
 import { realPlayers } from '../game/data/realPlayers';
 import { realTeams } from '../game/data/realTeams';
 import { realMaps } from '../game/data/realMaps';
@@ -26,6 +26,7 @@ interface GameState {
   tournaments: Record<string, Tournament>;
   historyNews: import('../types').NewsItem[];
   financialHistory: SaveGame['financialHistory'];
+  trainingPlan: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
 
   // Estados locais UI / Sessão
   currentScreen: string;
@@ -33,6 +34,7 @@ interface GameState {
   selectedTeamId: string | null;
   activeTournamentId: string | null;
   activeMatch: Match | null;
+  finishedMatch: Match | null; // Partida recém-concluída, exibida na tela de resultado
   activeMatchRoundIndex: number;
   isSimulatingMatch: boolean;
   gameLoaded: boolean;
@@ -48,6 +50,8 @@ interface GameState {
   avancarSemana: () => void;
   definirTitular: (playerId: string, status: 'titular' | 'reserva') => void;
   definirPapelEspecial: (playerId: string, roleType: 'IGL' | 'AWPer') => void;
+  definirTaticas: (tactics: Team['tactics']) => void;
+  definirTreinoSemanal: (intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp', focus: string) => { success: boolean; message: string };
   fazerPropostaContratacao: (playerId: string) => { success: boolean; message: string };
   venderJogador: (playerId: string) => { success: boolean; message: string };
   renovarContrato: (playerId: string) => { success: boolean; message: string };
@@ -62,9 +66,11 @@ interface GameState {
   
   // Ações de Partida
   iniciarPartidaAtiva: (match: Match) => void;
+  iniciarPartidaContra: (opponentId: string, competitionId?: string) => void; // Gera partida e abre o pré-jogo
+  assistirPartida: () => void;       // Do pré-jogo: assiste round a round
   avancarRoundVisual: () => boolean; // Avança o round visual na simulação interativa
   finalizarPartidaAtiva: () => void;
-  simularPartidaRapida: (matchId: string) => void;
+  fecharResultado: () => void;       // Fecha a tela de resultado e volta ao painel
 
   // Persistência
   salvarJogo: (slot?: string) => void;
@@ -90,12 +96,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   tournaments: {},
   historyNews: [],
   financialHistory: [],
+  trainingPlan: { intensity: 'normal', focus: 'aim' },
 
   currentScreen: 'home',
   selectedPlayerId: null,
   selectedTeamId: null,
   activeTournamentId: null,
   activeMatch: null,
+  finishedMatch: null,
   activeMatchRoundIndex: 0,
   isSimulatingMatch: false,
   gameLoaded: false,
@@ -165,6 +173,46 @@ export const useGameStore = create<GameState>((set, get) => ({
       teamsData[finalUserTeamId].budget = startingBudget;
     }
 
+    // Garante que TODO time tenha pelo menos 5 titulares (spec §6.1/§8: times incompletos
+    // são preenchidos com jogadores gerados). Sem isso, ~60 times ficam sem elenco e a
+    // simulação quebra (Math.max de array vazio / MVP indefinido).
+    const overallRangeByTier: Record<Team['tier'], { min: number; max: number }> = {
+      1: { min: 76, max: 88 },
+      2: { min: 70, max: 80 },
+      3: { min: 63, max: 74 },
+      4: { min: 55, max: 67 },
+    };
+    Object.values(teamsData).forEach((team) => {
+      const titulares = Object.values(playersData).filter(
+        (p) => p.teamId === team.id && p.status === 'titular'
+      );
+      let faltam = 5 - titulares.length;
+      if (faltam <= 0) return;
+
+      // Primeiro, promove reservas já existentes do próprio time
+      const reservas = Object.values(playersData).filter(
+        (p) => p.teamId === team.id && p.status === 'reserva'
+      );
+      for (const reserva of reservas) {
+        if (faltam <= 0) break;
+        reserva.status = 'titular';
+        faltam--;
+      }
+
+      // Gera o restante com overall coerente ao tier do time
+      const range = overallRangeByTier[team.tier];
+      while (faltam > 0) {
+        const generated = generatePlayer({
+          minOverall: range.min,
+          maxOverall: range.max,
+          teamId: team.id,
+        });
+        generated.status = 'titular';
+        playersData[generated.id] = generated;
+        faltam--;
+      }
+    });
+
     // Configura patrocinadores
     const sponsorsData = {} as Record<string, Sponsor>;
     defaultSponsors.forEach((s) => { sponsorsData[s.id] = s; });
@@ -180,6 +228,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       
       // Limita quantidade de times conforme o tier
       copyT.teamIds = eligibleTeams.slice(0, t.id === 'major_mundial' ? 16 : 8);
+      // Garante a vaga do time do usuário no torneio do seu tier (senão ele nunca jogaria)
+      if (eligibleTeams.includes(finalUserTeamId) && !copyT.teamIds.includes(finalUserTeamId)) {
+        copyT.teamIds[copyT.teamIds.length - 1] = finalUserTeamId;
+      }
       tournamentsData[t.id] = copyT;
     });
 
@@ -217,49 +269,28 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   avancarSemana: () => {
-    const { currentWeek, userTeamId, teams, players, tournaments, historyNews, financialHistory, currentSeason } = get();
+    const { currentWeek, userTeamId, teams, players, tournaments, historyNews, financialHistory, currentSeason, trainingPlan } = get();
 
-    // 1. Verifica se há partida pendente jogável do usuário nesta semana
-    const activeTournamentsThisWeek = Object.values(tournaments).filter(
+    // 1. Há partida de campeonato do usuário nesta semana? (bracket por rodadas — A5)
+    // O adversário varia por rodada; o avanço/eliminação é tratado em finalizarPartidaAtiva.
+    const tournamentThisWeek = Object.values(tournaments).find(
       t => t.weekScheduled === currentWeek && !t.isFinished && t.teamIds.includes(userTeamId)
     );
 
-    // Se o usuário tem campeonato rolando nessa semana e não jogou a partida dele ainda,
-    // devemos simular ou forçar a jogabilidade na tela.
-    // Para simplificar: se houver jogo agendado, ele será disputado.
-    // Caso não queira travar, rodaremos a simulação de fundo da partida dele.
-    let userHasMatchThisWeek = false;
-    let matchToPlay: Match | null = null;
-    let tournamentTarget: Tournament | null = null;
+    if (tournamentThisWeek) {
+      const opponents = tournamentThisWeek.teamIds.filter(id => id !== userTeamId && teams[id]);
+      if (opponents.length > 0) {
+        const oppId = opponents[tournamentThisWeek.currentRound % opponents.length];
+        const userTeam = teams[userTeamId];
+        const oppTeam = teams[oppId];
+        const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
+        const oppSquad = Object.values(players).filter(p => p.teamId === oppId && p.status === 'titular');
+        const mapSelected = realMaps.find(m => m.status === 'active') ?? realMaps[0];
 
-    activeTournamentsThisWeek.forEach(t => {
-      // Procura se tem algum confronto dele nesse torneio
-      // No MVP, as rodadas de playoff ou chaveamento ocorrem sequencialmente.
-      // Se ainda não simulamos a rodada do time do usuário:
-      const userPlayed = t.matches.some(m => m.roundName === `Rodada ${t.currentRound}` && m.matchId); // placeholder
-      if (!userPlayed) {
-        userHasMatchThisWeek = true;
-        tournamentTarget = t;
+        const match = simulateWholeMatchQuick(userTeam, oppTeam, userSquad, oppSquad, mapSelected, tournamentThisWeek.id);
+        set({ activeMatch: match, currentScreen: 'matchPreview', activeMatchRoundIndex: 0, isSimulatingMatch: false });
+        return;
       }
-    });
-
-    if (userHasMatchThisWeek && tournamentTarget) {
-      // Procura adversário
-      const oppId = (tournamentTarget as Tournament).teamIds.find((id: string) => id !== userTeamId) ?? 'furia';
-      const userTeam = teams[userTeamId];
-      const oppTeam = teams[oppId];
-
-      const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
-      const oppSquad = Object.values(players).filter(p => p.teamId === oppId && p.status === 'titular');
-      
-      const mapSelected = realMaps.find(m => m.status === 'active') ?? realMaps[0];
-
-      // Gera partida
-      const match = simulateWholeMatchQuick(userTeam, oppTeam, userSquad, oppSquad, mapSelected, (tournamentTarget as Tournament).id);
-      
-      // Abre a tela de pré-jogo e partida
-      set({ activeMatch: match, currentScreen: 'matchPreview', activeMatchRoundIndex: 0 });
-      return;
     }
 
     // 2. ECONOMIA SEMANAL:
@@ -273,6 +304,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       income += sp.weeklyIncome;
     }
 
+    // Receita operacional base (bilheteria/conteúdo/loja), proporcional à reputação —
+    // dá sustentabilidade ao time mesmo sem patrocínio assinado (objetivo: jogo sustentável).
+    const baseIncome = Math.round(userTeam.reputation * 300);
+    income += baseIncome;
+
     // Despesa de salários de jogadores ativos e staff
     const userPlayers = Object.values(players).filter(p => p.teamId === userTeamId);
     userPlayers.forEach(p => {
@@ -284,6 +320,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (userTeam.staff.coachId) expense += staffSalary;
     if (userTeam.staff.analystId) expense += staffSalary;
     if (userTeam.staff.psychologistId) expense += staffSalary;
+
+    // Custo do Bootcamp (quando o plano de treino da semana for bootcamp e houver caixa)
+    let bootcampCost = 0;
+    if (trainingPlan.intensity === 'bootcamp' && userTeam.budget >= 50000) {
+      bootcampCost = 50000;
+      expense += bootcampCost;
+    }
 
     const netAmount = income - expense;
     const newBudget = userTeam.budget + netAmount;
@@ -298,28 +341,64 @@ export const useGameStore = create<GameState>((set, get) => ({
     // Histórico financeiro
     const newFinEntry = [
       ...financialHistory,
-      { week: currentWeek, description: 'Patrocínio Semanal', amount: income },
-      { week: currentWeek, description: 'Folha Salarial de Jogadores e Staff', amount: -expense }
+      { week: currentWeek, description: 'Receita Operacional + Patrocínio', amount: income },
+      { week: currentWeek, description: 'Folha Salarial, Staff e Custos', amount: -expense }
     ];
 
-    // 3. EVOLUÇÃO DE TREINO E RECUPERAÇÃO DE ENERGIA/CANSAÇO
+    // 3. EVOLUÇÃO POR TREINO (aplica o plano semanal definido pelo usuário) + ENERGIA/MORAL.
+    // Parâmetros por intensidade: chance de evoluir atributo, variação de energia e de moral.
+    const intensityParams: Record<typeof trainingPlan.intensity, { gainChance: number; energy: number; moral: number; allAttrs: number }> = {
+      leve:     { gainChance: 0.05, energy: 15,  moral: 5,  allAttrs: 0 },
+      normal:   { gainChance: 0.15, energy: -5,  moral: 0,  allAttrs: 0 },
+      pesada:   { gainChance: 0.30, energy: -15, moral: -2, allAttrs: 0 },
+      bootcamp: { gainChance: 0.40, energy: -10, moral: 3,  allAttrs: bootcampCost > 0 ? 1 : 0 },
+    };
+    const params = intensityParams[trainingPlan.intensity];
+    // Mapeia o foco escolhido para o atributo correspondente (aim e spray treinam mira)
+    const focusAttr: keyof Player['attributes'] =
+      trainingPlan.focus === 'gamesense' ? 'gamesense'
+      : trainingPlan.focus === 'utility' ? 'utility'
+      : trainingPlan.focus === 'clutch' ? 'clutch'
+      : 'aim';
+
+    const caixaNegativo = newBudget < 0;
     const updatedPlayers = { ...players };
     Object.values(updatedPlayers).forEach(p => {
-      if (p.teamId === userTeamId && p.status === 'titular') {
-        // Buff de atributos com base no treino
-        // Treino médio: mira +0.2, cansaço aumenta um pouco, moral sobe se vencer
-        const aimGain = Math.random() < 0.15 ? 1 : 0;
-        const gsGain = Math.random() < 0.15 ? 1 : 0;
-        p.attributes.aim = Math.min(99, p.attributes.aim + aimGain);
-        p.attributes.gamesense = Math.min(99, p.attributes.gamesense + gsGain);
-        
-        // Cansaço regenera se for reserva, consome se for titular
-        p.energy = Math.max(50, p.energy - (Math.random() * 6 + 2));
-        p.overall = Math.round((p.attributes.aim + p.attributes.gamesense + p.attributes.clutch + p.attributes.utility + p.attributes.igl) / 5);
-      } else if (p.teamId === userTeamId && p.status === 'reserva') {
-        p.energy = Math.min(100, p.energy + 10);
+      if (p.teamId !== userTeamId) return;
+
+      if (p.status === 'titular') {
+        const youthBonus = p.age <= 22 ? 1.6 : 1.0; // jovens evoluem mais (spec §15)
+        const attrs = p.attributes;
+        (['aim', 'gamesense', 'clutch', 'utility', 'igl'] as (keyof Player['attributes'])[]).forEach((k) => {
+          const chance = (k === focusAttr ? params.gainChance * 2 : params.gainChance) * youthBonus;
+          let gain = params.allAttrs; // bootcamp dá +1 base em todos os atributos
+          if (Math.random() < chance) gain += 1;
+          if (gain > 0) attrs[k] = Math.min(99, attrs[k] + gain);
+        });
+
+        p.energy = Math.max(0, Math.min(100, p.energy + params.energy));
+        let moralDelta = params.moral;
+        if (caixaNegativo) moralDelta -= 4; // A4: crise financeira derruba a moral
+        p.moral = Math.max(0, Math.min(100, p.moral + moralDelta));
+
+        p.overall = Math.min(99, Math.round((attrs.aim + attrs.gamesense + attrs.clutch + attrs.utility + attrs.igl) / 5));
+      } else if (p.status === 'reserva') {
+        p.energy = Math.min(100, p.energy + 12); // reservas descansam
+        if (caixaNegativo) p.moral = Math.max(0, p.moral - 4);
       }
     });
+
+    // A4: notícia de pressão da diretoria quando o caixa fecha no vermelho
+    const newsAfterWeek = caixaNegativo
+      ? [{
+          id: `fin_${currentSeason}_${currentWeek}`,
+          title: `Diretoria do ${userTeam.name} cobra equilíbrio financeiro!`,
+          content: `O caixa do ${userTeam.name} fechou a semana no vermelho ($${newBudget.toLocaleString()}). A diretoria pressiona por cortes e a moral do elenco caiu. Assine um patrocínio ou venda jogadores para reequilibrar as contas.`,
+          category: 'general' as const,
+          week: currentWeek,
+          dateStr: `Semana ${currentWeek}`,
+        }, ...historyNews]
+      : historyNews;
 
     // 4. SIMULAR PARTIDAS DE OUTRAS EQUIPES DE TORNEIOS DE FUNDO
     // (Simulações simplificadas para alimentar o ranking e notícias)
@@ -348,6 +427,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       teams: updatedTeams,
       players: updatedPlayers,
       financialHistory: newFinEntry,
+      historyNews: newsAfterWeek,
     });
 
     // Auto-save no avanço
@@ -397,6 +477,28 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     set({ players: updatedPlayers });
     get().salvarJogo();
+  },
+
+  definirTaticas: (tactics) => {
+    const { userTeamId, teams } = get();
+    if (!teams[userTeamId]) return;
+    // Atualização IMUTÁVEL do store (antes mutava o objeto direto e não persistia)
+    const updatedTeams = {
+      ...teams,
+      [userTeamId]: { ...teams[userTeamId], tactics: { ...tactics } },
+    };
+    set({ teams: updatedTeams });
+    get().salvarJogo();
+  },
+
+  definirTreinoSemanal: (intensity, focus) => {
+    const { userTeamId, teams } = get();
+    if (intensity === 'bootcamp' && (teams[userTeamId]?.budget ?? 0) < 50000) {
+      return { success: false, message: 'Caixa insuficiente para bancar um Bootcamp ($50.000).' };
+    }
+    set({ trainingPlan: { intensity, focus } });
+    get().salvarJogo();
+    return { success: true, message: `Plano de treino (${intensity}) com foco em ${focus} definido para as próximas semanas.` };
   },
 
   fazerPropostaContratacao: (playerId) => {
@@ -588,13 +690,35 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
   },
 
+  // Gera uma partida contra um adversário e abre o pré-jogo.
+  // Centraliza a criação do confronto para que Dashboard e simulação usem a MESMA partida.
+  iniciarPartidaContra: (opponentId, competitionId = 'amistoso') => {
+    const { userTeamId, teams, players } = get();
+    const userTeam = teams[userTeamId];
+    const oppTeam = teams[opponentId];
+    if (!userTeam || !oppTeam) return;
+
+    const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
+    const oppSquad = Object.values(players).filter(p => p.teamId === opponentId && p.status === 'titular');
+    const mapSelected = realMaps.find(m => m.status === 'active') ?? realMaps[0];
+
+    const match = simulateWholeMatchQuick(userTeam, oppTeam, userSquad, oppSquad, mapSelected, competitionId);
+    set({ activeMatch: match, currentScreen: 'matchPreview', activeMatchRoundIndex: 0, isSimulatingMatch: false });
+  },
+
+  // Do pré-jogo: assiste a partida round a round (ativa os controles de simulação visual).
+  assistirPartida: () => {
+    if (!get().activeMatch) return;
+    set({ isSimulatingMatch: true, currentScreen: 'matchSim', activeMatchRoundIndex: 0 });
+  },
+
   avancarRoundVisual: () => {
     const { activeMatch, activeMatchRoundIndex } = get();
     if (!activeMatch) return false;
 
     const nextIndex = activeMatchRoundIndex + 1;
     if (nextIndex >= activeMatch.rounds.length) {
-      // Fim da partida
+      // Chegou ao último round: encerra a simulação visual (o usuário então vê o resultado)
       set({ isSimulatingMatch: false });
       return false;
     }
@@ -645,26 +769,70 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const news = generateMatchNews(winnerTeam, loserTeam, wScore, lScore, mvpPlayer, mapObj.name, currentWeek);
 
-    // Marca campeonato associado como jogado
+    // Progresso de campeonato — bracket por rodadas (A5). Partidas amistosas (competitionId
+    // 'amistoso') não têm torneio associado e não entram aqui.
     const updatedTournaments = { ...tournaments };
-    if (updatedTournaments[activeMatch.competitionId]) {
-      updatedTournaments[activeMatch.competitionId].isFinished = true;
+    const tourney = updatedTournaments[activeMatch.competitionId];
+    let championNews: NewsItem | null = null;
+    if (tourney && !tourney.isFinished) {
+      const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tourney.teamIds.length))));
+      const updatedT: Tournament = { ...tourney };
+      if (isUserWinner) {
+        updatedT.currentRound = tourney.currentRound + 1;
+        if (updatedT.currentRound >= totalRounds) {
+          // CAMPEÃO: encerra o torneio, paga a premiação e contabiliza o título
+          updatedT.isFinished = true;
+          updatedT.championId = userTeamId;
+          updatedTeams[userTeamId].budget += tourney.prizePool;
+          updatedTeams[userTeamId].points += 150;
+          updatedTeams[userTeamId].stats.titles++;
+          set({
+            financialHistory: [
+              ...get().financialHistory,
+              { week: currentWeek, description: `Premiação: Campeão do ${tourney.name}`, amount: tourney.prizePool }
+            ]
+          });
+          championNews = {
+            id: `champ_${tourney.id}_${currentWeek}`,
+            title: `${userTeam.name} é CAMPEÃO do ${tourney.name}!`,
+            content: `Em uma campanha de tirar o fôlego, o ${userTeam.name} conquistou o título do ${tourney.name} e faturou $${tourney.prizePool.toLocaleString()} em premiação. A torcida faz a festa!`,
+            category: 'results',
+            week: currentWeek,
+            dateStr: `Semana ${currentWeek}`,
+          };
+        } else {
+          // Avança de fase: a próxima rodada ocorre na semana seguinte
+          updatedT.weekScheduled = currentWeek + 1;
+        }
+      } else {
+        // Eliminado do campeonato
+        updatedT.isFinished = true;
+      }
+      updatedTournaments[activeMatch.competitionId] = updatedT;
     }
 
     set({
       teams: updatedTeams,
       tournaments: updatedTournaments,
+      finishedMatch: activeMatch, // Preserva a partida para a tela de resultado (MVP, stats)
       activeMatch: null,
+      isSimulatingMatch: false,
       currentScreen: 'matchResult',
-      historyNews: [news, ...get().historyNews]
+      historyNews: championNews ? [championNews, news, ...get().historyNews] : [news, ...get().historyNews]
     });
 
     get().salvarJogo();
   },
 
-  simularPartidaRapida: (matchId) => {
-    // Roda direto sem feedback de visualização
-    // (Não implementado no MVP mas pronto para integração)
+  fecharResultado: () => {
+    // Encerra a tela de resultado e retorna ao painel principal
+    set({
+      finishedMatch: null,
+      activeMatch: null,
+      isSimulatingMatch: false,
+      activeMatchRoundIndex: 0,
+      currentScreen: 'dashboard'
+    });
   },
 
   salvarJogo: (slot = 'prostrike_save') => {
@@ -682,7 +850,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       staffList,
       tournaments,
       historyNews,
-      financialHistory
+      financialHistory,
+      trainingPlan
     } = get();
 
     const saveObj: SaveGame = {
@@ -701,7 +870,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       staffList,
       tournaments,
       historyNews,
-      financialHistory
+      financialHistory,
+      trainingPlan
     };
 
     localStorage.setItem(slot, JSON.stringify(saveObj));
@@ -727,6 +897,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         tournaments: saveObj.tournaments,
         historyNews: saveObj.historyNews,
         financialHistory: saveObj.financialHistory,
+        trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         currentScreen: 'dashboard',
         gameLoaded: true
       });
@@ -750,7 +921,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       staffList,
       tournaments,
       historyNews,
-      financialHistory
+      financialHistory,
+      trainingPlan
     } = get();
 
     const saveObj: SaveGame = {
@@ -769,7 +941,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       staffList,
       tournaments,
       historyNews,
-      financialHistory
+      financialHistory,
+      trainingPlan
     };
 
     return btoa(JSON.stringify(saveObj));
@@ -793,6 +966,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         tournaments: saveObj.tournaments,
         historyNews: saveObj.historyNews,
         financialHistory: saveObj.financialHistory,
+        trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         currentScreen: 'dashboard',
         gameLoaded: true
       });
@@ -808,8 +982,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   resetarDadosEditor: () => {
-    // Reseta todo o estado para o padrão
-    localStorage.clear();
+    // Remove apenas o save principal (antes apagava TODOS os dados do localStorage do site)
+    localStorage.removeItem('prostrike_save');
     window.location.reload();
   }
 }));

@@ -1,6 +1,7 @@
 import { NewsItem, Player, Team } from '../../types';
 
-const generateId = () => Math.random().toString(36).substr(2, 9);
+let newsIdCounter = 0;
+const generateId = () => `news_${(newsIdCounter++).toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
 export const generateTransferNews = (player: Player, oldTeamName: string, newTeamName: string, week: number): NewsItem => {
   const titles = [

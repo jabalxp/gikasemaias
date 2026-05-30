@@ -14,6 +14,8 @@ import { Rankings } from './pages/Rankings';
 import { DataEditor } from './pages/DataEditor';
 import { Saves } from './pages/Saves';
 import { MatchSim } from './pages/MatchSim';
+import { MatchPreview } from './pages/MatchPreview';
+import { MatchResult } from './pages/MatchResult';
 
 function App() {
   const { currentScreen, gameLoaded, carregarJogo } = useGameStore();
@@ -55,9 +57,11 @@ function App() {
         return <DataEditor />;
       case 'saves':
         return <Saves />;
-      case 'matchSim':
       case 'matchPreview':
+        return <MatchPreview />;
       case 'matchResult':
+        return <MatchResult />;
+      case 'matchSim':
         return <MatchSim />;
       default:
         return <Dashboard />;

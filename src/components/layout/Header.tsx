@@ -1,6 +1,6 @@
 import React from 'react';
 import { useGameStore } from '../../store/useGameStore';
-import { Calendar, Wallet, Award, FastForward, Play } from 'lucide-react';
+import { Calendar, Wallet, Award, FastForward } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { currentWeek, currentSeason, userTeamId, teams, avancarSemana, setScreen } = useGameStore();
@@ -48,25 +48,16 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* SEÇÃO DA DIREITA: AÇÕES DE CARREIRA */}
+      {/* SEÇÃO DA DIREITA: AÇÃO DE CARREIRA */}
       <div className="flex items-center gap-4">
-        {/* BOTÃO JOGAR PRÓXIMA PARTIDA */}
+        {/* AVANÇAR SEMANA: paga finanças, aplica treino e dispara a partida de campeonato se houver */}
         <button
           onClick={() => avancarSemana()}
+          title="Avança um ciclo de semana: treino, finanças e partida de campeonato se agendada"
           className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-extrabold bg-gradient-to-r from-brand-cyan to-brand-purple hover:scale-102 hover:shadow-lg hover:shadow-brand-cyan/20 active:scale-98 transition-all duration-300 text-brand-dark"
         >
-          <Play className="w-4.5 h-4.5 fill-brand-dark" />
-          <span>Jogar Partida / Avançar</span>
-        </button>
-
-        {/* BOTÃO AVANÇAR SEMANA RÁPIDO */}
-        <button
-          onClick={() => avancarSemana()}
-          title="Avança um ciclo de semana na carreira"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold border border-brand-border bg-zinc-900 hover:bg-zinc-800 text-slate-300 hover:text-white transition-all duration-300"
-        >
           <FastForward className="w-4.5 h-4.5" />
-          <span>Apenas Avançar</span>
+          <span>Avançar Semana</span>
         </button>
       </div>
     </header>

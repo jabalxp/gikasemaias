@@ -5,7 +5,7 @@ import { realMaps } from '../game/data/realMaps';
 import { Sliders, Award, Map, Settings, Play } from 'lucide-react';
 
 export const Tactics: React.FC = () => {
-  const { userTeamId, teams, setScreen } = useGameStore();
+  const { userTeamId, teams, definirTaticas } = useGameStore();
   const userTeam = teams[userTeamId];
 
   // Configurações táticas locais
@@ -13,6 +13,7 @@ export const Tactics: React.FC = () => {
   const [tempo, setTempo] = useState(userTeam?.tactics.tempo ?? 'normal');
   const [focus, setFocus] = useState(userTeam?.tactics.focus ?? 'default');
   const [utilityUsage, setUtilityUsage] = useState(userTeam?.tactics.utilityUsage ?? 'high');
+  const [economyStyle, setEconomyStyle] = useState(userTeam?.tactics.economyStyle ?? 'balanced');
 
   // Estado do simulador de veto
   const [vetoMode, setVetoMode] = useState<'MD1' | 'MD3' | 'MD5'>('MD1');
@@ -24,14 +25,9 @@ export const Tactics: React.FC = () => {
   if (!userTeam) return null;
 
   const handleSaveTactics = () => {
-    // Atualiza na store
-    userTeam.tactics = {
-      playstyle,
-      tempo,
-      focus,
-      utilityUsage,
-      economyStyle: userTeam.tactics.economyStyle // mantém
-    };
+    // Persiste via ação do store (set imutável + salvarJogo). Antes mutava o objeto direto
+    // e nada era salvo no disco.
+    definirTaticas({ playstyle, tempo, focus, utilityUsage, economyStyle });
     alert('Configurações táticas aplicadas e salvas com sucesso!');
   };
 
@@ -127,6 +123,21 @@ export const Tactics: React.FC = () => {
                 <option value="medium">Médio (Flashs de Entrada)</option>
                 <option value="high">Alto (Esmolas, Smokes & Molotovs)</option>
                 <option value="very_high">Muito Alto (Execuções Milimétricas)</option>
+              </select>
+            </div>
+
+            {/* ESTILO ECONÔMICO */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Gestão Econômica</label>
+              <select
+                value={economyStyle}
+                onChange={(e) => setEconomyStyle(e.target.value as any)}
+                className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
+              >
+                <option value="eco">Econômica (Poupa para Full Buys)</option>
+                <option value="balanced">Equilibrada (Default)</option>
+                <option value="force">Forçada (Pressão Constante)</option>
+                <option value="aggressive">Agressiva (Compra Sempre)</option>
               </select>
             </div>
           </div>

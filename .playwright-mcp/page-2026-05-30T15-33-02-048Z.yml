@@ -1,0 +1,391 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img [ref=e8]
+        - generic [ref=e11]:
+          - heading "PROSTRIKE" [level=1] [ref=e12]
+          - text: MANAGER
+      - navigation [ref=e13]:
+        - button "Painel Principal" [ref=e14]:
+          - img [ref=e15]
+          - generic [ref=e20]: Painel Principal
+        - button "Gerenciar Elenco" [ref=e21]:
+          - img [ref=e22]
+          - generic [ref=e27]: Gerenciar Elenco
+        - button "Táticas & Vetos" [ref=e28]:
+          - img [ref=e29]
+          - generic [ref=e30]: Táticas & Vetos
+        - button "Treino Semanal" [ref=e31]:
+          - img [ref=e32]
+          - generic [ref=e38]: Treino Semanal
+        - button "Mercado Pro" [ref=e39]:
+          - img [ref=e40]
+          - generic [ref=e43]: Mercado Pro
+        - button "Finanças & Sponsor" [ref=e44]:
+          - img [ref=e45]
+          - generic [ref=e47]: Finanças & Sponsor
+        - button "Rankings Mundiais" [ref=e48]:
+          - img [ref=e49]
+          - generic [ref=e52]: Rankings Mundiais
+        - button "Editor de Dados" [active] [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: Editor de Dados
+        - button "Gerenciar Saves" [ref=e57]:
+          - img [ref=e58]
+          - generic [ref=e62]: Gerenciar Saves
+    - generic [ref=e64]:
+      - generic [ref=e65]: FU
+      - generic [ref=e66]:
+        - paragraph [ref=e67]: FURIA
+        - generic [ref=e68]: "Tier 1 • #730 pts"
+  - main [ref=e69]:
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - img [ref=e74]
+          - generic [ref=e76]:
+            - paragraph [ref=e77]: Calendário
+            - paragraph [ref=e78]: Temporada 1 • Sem 12
+        - generic [ref=e79]:
+          - img [ref=e81]
+          - generic [ref=e84]:
+            - paragraph [ref=e85]: Caixa / Saldo
+            - paragraph [ref=e86]: $-83.000
+        - generic [ref=e87]:
+          - img [ref=e89]
+          - generic [ref=e92]:
+            - paragraph [ref=e93]: Reputação
+            - paragraph [ref=e94]: 88/100
+      - generic [ref=e95]:
+        - button "Jogar Partida / Avançar" [ref=e96]:
+          - img [ref=e97]
+          - generic [ref=e99]: Jogar Partida / Avançar
+        - button "Apenas Avançar" [ref=e100]:
+          - img [ref=e101]
+          - generic [ref=e104]: Apenas Avançar
+    - generic [ref=e3252]:
+      - generic [ref=e3253]:
+        - generic [ref=e3254]:
+          - heading "Editor de Banco de Dados" [level=2] [ref=e3255]:
+            - img [ref=e3256]
+            - generic [ref=e3258]: Editor de Banco de Dados
+          - paragraph [ref=e3259]: Personalize nomes, nicknames, overalls e atributos individuais dos astros do e-sports.
+        - button "Resetar Base Padrão" [ref=e3260]:
+          - img [ref=e3261]
+          - generic [ref=e3264]: Resetar Base Padrão
+      - generic [ref=e3265]:
+        - generic [ref=e3267]:
+          - generic [ref=e3268]:
+            - img [ref=e3269]
+            - textbox "Buscar nickname ou nome..." [ref=e3272]
+          - generic [ref=e3273]:
+            - generic [ref=e3274] [cursor=pointer]:
+              - generic [ref=e3275]:
+                - paragraph [ref=e3276]:
+                  - generic [ref=e3277]: FalleN
+                  - generic [ref=e3278]: IGL
+                - generic [ref=e3279]: Gabriel Toledo
+              - generic [ref=e3280]: OVR 85
+            - generic [ref=e3281] [cursor=pointer]:
+              - generic [ref=e3282]:
+                - paragraph [ref=e3283]:
+                  - generic [ref=e3284]: KSCERATO
+                  - generic [ref=e3285]: Rifler
+                - generic [ref=e3286]: Kaike Cerato
+              - generic [ref=e3287]: OVR 82
+            - generic [ref=e3288] [cursor=pointer]:
+              - generic [ref=e3289]:
+                - paragraph [ref=e3290]:
+                  - generic [ref=e3291]: yuurih
+                  - generic [ref=e3292]: Rifler
+                - generic [ref=e3293]: Yuri Santos
+              - generic [ref=e3294]: OVR 76
+            - generic [ref=e3295] [cursor=pointer]:
+              - generic [ref=e3296]:
+                - paragraph [ref=e3297]:
+                  - generic [ref=e3298]: chelo
+                  - generic [ref=e3299]: Entry Fragger
+                - generic [ref=e3300]: Marcelo Cespedes
+              - generic [ref=e3301]: OVR 69
+            - generic [ref=e3302] [cursor=pointer]:
+              - generic [ref=e3303]:
+                - paragraph [ref=e3304]:
+                  - generic [ref=e3305]: skullz
+                  - generic [ref=e3306]: Support
+                - generic [ref=e3307]: Felipe Medeiros
+              - generic [ref=e3308]: OVR 75
+            - generic [ref=e3309] [cursor=pointer]:
+              - generic [ref=e3310]:
+                - paragraph [ref=e3311]:
+                  - generic [ref=e3312]: guerri
+                  - generic [ref=e3313]: Support
+                - generic [ref=e3314]: Nicholas Nogueira
+              - generic [ref=e3315]: OVR 72
+            - generic [ref=e3316] [cursor=pointer]:
+              - generic [ref=e3317]:
+                - paragraph [ref=e3318]:
+                  - generic [ref=e3319]: biguzera
+                  - generic [ref=e3320]: IGL
+                - generic [ref=e3321]: Rodrigo Bittencourt
+              - generic [ref=e3322]: OVR 84
+            - generic [ref=e3323] [cursor=pointer]:
+              - generic [ref=e3324]:
+                - paragraph [ref=e3325]:
+                  - generic [ref=e3326]: nqz
+                  - generic [ref=e3327]: AWPer
+                - generic [ref=e3328]: Lucas Soares
+              - generic [ref=e3329]: OVR 81
+            - generic [ref=e3330] [cursor=pointer]:
+              - generic [ref=e3331]:
+                - paragraph [ref=e3332]:
+                  - generic [ref=e3333]: kauez
+                  - generic [ref=e3334]: Rifler
+                - generic [ref=e3335]: Kaue Kasolo
+              - generic [ref=e3336]: OVR 79
+            - generic [ref=e3337] [cursor=pointer]:
+              - generic [ref=e3338]:
+                - paragraph [ref=e3339]:
+                  - generic [ref=e3340]: snow
+                  - generic [ref=e3341]: Rifler
+                - generic [ref=e3342]: João Vinicius
+              - generic [ref=e3343]: OVR 77
+            - generic [ref=e3344] [cursor=pointer]:
+              - generic [ref=e3345]:
+                - paragraph [ref=e3346]:
+                  - generic [ref=e3347]: lux
+                  - generic [ref=e3348]: Support
+                - generic [ref=e3349]: Lucas Meneghini
+              - generic [ref=e3350]: OVR 76
+            - generic [ref=e3351] [cursor=pointer]:
+              - generic [ref=e3352]:
+                - paragraph [ref=e3353]:
+                  - generic [ref=e3354]: exit
+                  - generic [ref=e3355]: Rifler
+                - generic [ref=e3356]: Raphael Lacerda
+              - generic [ref=e3357]: OVR 80
+            - generic [ref=e3358] [cursor=pointer]:
+              - generic [ref=e3359]:
+                - paragraph [ref=e3360]:
+                  - generic [ref=e3361]: insani
+                  - generic [ref=e3362]: Star Player
+                - generic [ref=e3363]: Felipe Yuji
+              - generic [ref=e3364]: OVR 83
+            - generic [ref=e3365] [cursor=pointer]:
+              - generic [ref=e3366]:
+                - paragraph [ref=e3367]:
+                  - generic [ref=e3368]: saffee
+                  - generic [ref=e3369]: AWPer
+                - generic [ref=e3370]: Rafael Costa
+              - generic [ref=e3371]: OVR 80
+            - generic [ref=e3372] [cursor=pointer]:
+              - generic [ref=e3373]:
+                - paragraph [ref=e3374]:
+                  - generic [ref=e3375]: drop
+                  - generic [ref=e3376]: Support
+                - generic [ref=e3377]: André Abreu
+              - generic [ref=e3378]: OVR 78
+            - generic [ref=e3379] [cursor=pointer]:
+              - generic [ref=e3380]:
+                - paragraph [ref=e3381]:
+                  - generic [ref=e3382]: brnz4n
+                  - generic [ref=e3383]: Entry Fragger
+                - generic [ref=e3384]: Breno Poletto
+              - generic [ref=e3385]: OVR 77
+            - generic [ref=e3386] [cursor=pointer]:
+              - generic [ref=e3387]:
+                - paragraph [ref=e3388]:
+                  - generic [ref=e3389]: Lucaozy
+                  - generic [ref=e3390]: Rifler
+                - generic [ref=e3391]: Lucas Neves
+              - generic [ref=e3392]: OVR 80
+            - generic [ref=e3393] [cursor=pointer]:
+              - generic [ref=e3394]:
+                - paragraph [ref=e3395]:
+                  - generic [ref=e3396]: VINI
+                  - generic [ref=e3397]: IGL
+                - generic [ref=e3398]: Vinicius Figueiredo
+              - generic [ref=e3399]: OVR 81
+            - generic [ref=e3400] [cursor=pointer]:
+              - generic [ref=e3401]:
+                - paragraph [ref=e3402]:
+                  - generic [ref=e3403]: felps
+                  - generic [ref=e3404]: Star Player
+                - generic [ref=e3405]: João Vasconcellos
+              - generic [ref=e3406]: OVR 83
+            - generic [ref=e3407] [cursor=pointer]:
+              - generic [ref=e3408]:
+                - paragraph [ref=e3409]:
+                  - generic [ref=e3410]: HEN1
+                  - generic [ref=e3411]: AWPer
+                - generic [ref=e3412]: Henrique Teles
+              - generic [ref=e3413]: OVR 81
+            - generic [ref=e3414] [cursor=pointer]:
+              - generic [ref=e3415]:
+                - paragraph [ref=e3416]:
+                  - generic [ref=e3417]: decenty
+                  - generic [ref=e3418]: Rifler
+                - generic [ref=e3419]: Lucas Bacelar
+              - generic [ref=e3420]: OVR 78
+            - generic [ref=e3421] [cursor=pointer]:
+              - generic [ref=e3422]:
+                - paragraph [ref=e3423]:
+                  - generic [ref=e3424]: boltz
+                  - generic [ref=e3425]: Lurker
+                - generic [ref=e3426]: Ricardo Prass
+              - generic [ref=e3427]: OVR 79
+            - generic [ref=e3428] [cursor=pointer]:
+              - generic [ref=e3429]:
+                - paragraph [ref=e3430]:
+                  - generic [ref=e3431]: arT
+                  - generic [ref=e3432]: Entry Fragger
+                - generic [ref=e3433]: Andrei Piovezan
+              - generic [ref=e3434]: OVR 78
+            - generic [ref=e3435] [cursor=pointer]:
+              - generic [ref=e3436]:
+                - paragraph [ref=e3437]:
+                  - generic [ref=e3438]: zevy
+                  - generic [ref=e3439]: AWPer
+                - generic [ref=e3440]: Romeu Rocco
+              - generic [ref=e3441]: OVR 77
+            - generic [ref=e3442] [cursor=pointer]:
+              - generic [ref=e3443]:
+                - paragraph [ref=e3444]:
+                  - generic [ref=e3445]: PKL
+                  - generic [ref=e3446]: IGL
+                - generic [ref=e3447]: Vinicius Coelho
+              - generic [ref=e3448]: OVR 74
+            - generic [ref=e3449] [cursor=pointer]:
+              - generic [ref=e3450]:
+                - paragraph [ref=e3451]:
+                  - generic [ref=e3452]: coldzera
+                  - generic [ref=e3453]: Lurker
+                - generic [ref=e3454]: Marcelo David
+              - generic [ref=e3455]: OVR 80
+            - generic [ref=e3456] [cursor=pointer]:
+              - generic [ref=e3457]:
+                - paragraph [ref=e3458]:
+                  - generic [ref=e3459]: hardzao
+                  - generic [ref=e3460]: Support
+                - generic [ref=e3461]: Wesley Lopes
+              - generic [ref=e3462]: OVR 77
+            - generic [ref=e3463] [cursor=pointer]:
+              - generic [ref=e3464]:
+                - paragraph [ref=e3465]:
+                  - generic [ref=e3466]: dav1deuS
+                  - generic [ref=e3467]: Rifler
+                - generic [ref=e3468]: David Tapia Maldonado
+              - generic [ref=e3469]: OVR 78
+            - generic [ref=e3470] [cursor=pointer]:
+              - generic [ref=e3471]:
+                - paragraph [ref=e3472]:
+                  - generic [ref=e3473]: dumau
+                  - generic [ref=e3474]: Star Player
+                - generic [ref=e3475]: Eduardo Wolkmer
+              - generic [ref=e3476]: OVR 79
+            - generic [ref=e3477] [cursor=pointer]:
+              - generic [ref=e3478]:
+                - paragraph [ref=e3479]:
+                  - generic [ref=e3480]: try
+                  - generic [ref=e3481]: AWPer
+                - generic [ref=e3482]: Santino Rigal
+              - generic [ref=e3483]: OVR 80
+            - generic [ref=e3484] [cursor=pointer]:
+              - generic [ref=e3485]:
+                - paragraph [ref=e3486]:
+                  - generic [ref=e3487]: ZywOo
+                  - generic [ref=e3488]: Star Player
+                - generic [ref=e3489]: Mathieu Herbaut
+              - generic [ref=e3490]: OVR 95
+            - generic [ref=e3491] [cursor=pointer]:
+              - generic [ref=e3492]:
+                - paragraph [ref=e3493]:
+                  - generic [ref=e3494]: apEX
+                  - generic [ref=e3495]: IGL
+                - generic [ref=e3496]: Dan Madesclaire
+              - generic [ref=e3497]: OVR 83
+            - generic [ref=e3498] [cursor=pointer]:
+              - generic [ref=e3499]:
+                - paragraph [ref=e3500]:
+                  - generic [ref=e3501]: m0NESY
+                  - generic [ref=e3502]: Star Player
+                - generic [ref=e3503]: Ilya Osipov
+              - generic [ref=e3504]: OVR 94
+            - generic [ref=e3505] [cursor=pointer]:
+              - generic [ref=e3506]:
+                - paragraph [ref=e3507]:
+                  - generic [ref=e3508]: NiKo
+                  - generic [ref=e3509]: Star Player
+                - generic [ref=e3510]: Nikola Kovač
+              - generic [ref=e3511]: OVR 93
+            - generic [ref=e3512] [cursor=pointer]:
+              - generic [ref=e3513]:
+                - paragraph [ref=e3514]:
+                  - generic [ref=e3515]: donk
+                  - generic [ref=e3516]: Star Player
+                - generic [ref=e3517]: Danil Kryshkovets
+              - generic [ref=e3518]: OVR 94
+            - generic [ref=e3519] [cursor=pointer]:
+              - generic [ref=e3520]:
+                - paragraph [ref=e3521]:
+                  - generic [ref=e3522]: sh1ro
+                  - generic [ref=e3523]: AWPer
+                - generic [ref=e3524]: Dmitry Sokolov
+              - generic [ref=e3525]: OVR 90
+            - generic [ref=e3526] [cursor=pointer]:
+              - generic [ref=e3527]:
+                - paragraph [ref=e3528]:
+                  - generic [ref=e3529]: karrigan
+                  - generic [ref=e3530]: IGL
+                - generic [ref=e3531]: Finn Andersen
+              - generic [ref=e3532]: OVR 80
+            - generic [ref=e3533] [cursor=pointer]:
+              - generic [ref=e3534]:
+                - paragraph [ref=e3535]:
+                  - generic [ref=e3536]: ropz
+                  - generic [ref=e3537]: Lurker
+                - generic [ref=e3538]: Robin Kool
+              - generic [ref=e3539]: OVR 90
+            - generic [ref=e3540] [cursor=pointer]:
+              - generic [ref=e3541]:
+                - paragraph [ref=e3542]:
+                  - generic [ref=e3543]: dev1ce
+                  - generic [ref=e3544]: AWPer
+                - generic [ref=e3545]: Nicolai Reedtz
+              - generic [ref=e3546]: OVR 89
+            - generic [ref=e3547] [cursor=pointer]:
+              - generic [ref=e3548]:
+                - paragraph [ref=e3549]:
+                  - generic [ref=e3550]: XANTARES
+                  - generic [ref=e3551]: Star Player
+                - generic [ref=e3552]: Ismailcan Dörtkardeş
+              - generic [ref=e3553]: OVR 88
+            - generic [ref=e3554] [cursor=pointer]:
+              - generic [ref=e3555]:
+                - paragraph [ref=e3556]:
+                  - generic [ref=e3557]: s1mple
+                  - generic [ref=e3558]: Star Player
+                - generic [ref=e3559]: Oleksandr Kostyliev
+              - generic [ref=e3560]: OVR 92
+            - generic [ref=e3561] [cursor=pointer]:
+              - generic [ref=e3562]:
+                - paragraph [ref=e3563]:
+                  - generic [ref=e3564]: fer
+                  - generic [ref=e3565]: Entry Fragger
+                - generic [ref=e3566]: Fernando Alvarenga
+              - generic [ref=e3567]: OVR 76
+            - generic [ref=e3568] [cursor=pointer]:
+              - generic [ref=e3569]:
+                - paragraph [ref=e3570]:
+                  - generic [ref=e3571]: TACO
+                  - generic [ref=e3572]: Support
+                - generic [ref=e3573]: Epitácio de Melo
+              - generic [ref=e3574]: OVR 75
+            - generic [ref=e3575] [cursor=pointer]:
+              - generic [ref=e3576]:
+                - paragraph [ref=e3577]:
+                  - generic [ref=e3578]: fnx
+                  - generic [ref=e3579]: Clutcher
+                - generic [ref=e3580]: Lincoln Lau
+              - generic [ref=e3581]: OVR 73
+        - generic [ref=e3583]: Selecione um jogador ao lado para editá-lo

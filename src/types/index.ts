@@ -223,4 +223,5 @@ export interface SaveGame {
     description: string;
     amount: number; // positivo (receita) ou negativo (despesa)
   }[];
+  trainingPlan?: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
 }

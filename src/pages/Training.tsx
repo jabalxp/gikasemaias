@@ -3,11 +3,11 @@ import { useGameStore } from '../store/useGameStore';
 import { Dumbbell, ShieldAlert, Zap, TrendingUp } from 'lucide-react';
 
 export const Training: React.FC = () => {
-  const { userTeamId, teams, players } = useGameStore();
+  const { userTeamId, teams, players, definirTreinoSemanal, trainingPlan } = useGameStore();
   const userTeam = teams[userTeamId];
-  
-  const [intensity, setIntensity] = useState<'leve' | 'normal' | 'pesada' | 'bootcamp'>('normal');
-  const [focus, setFocus] = useState<string>('aim');
+
+  const [intensity, setIntensity] = useState<'leve' | 'normal' | 'pesada' | 'bootcamp'>(trainingPlan.intensity);
+  const [focus, setFocus] = useState<string>(trainingPlan.focus);
 
   if (!userTeam) return null;
 
@@ -21,12 +21,9 @@ export const Training: React.FC = () => {
   ];
 
   const handleApplyTraining = () => {
-    // Ação fictícia local para o MVP (no avanço calcula)
-    if (intensity === 'bootcamp' && userTeam.budget < 50000) {
-      alert('Caixa insuficiente para bancar um Bootcamp!');
-      return;
-    }
-    alert(`Plano de Treinamento (${intensity.toUpperCase()}) focado em ${focus.toUpperCase()} configurado para a próxima semana!`);
+    // Persiste o plano no store; o avanço de semana aplica os efeitos de verdade.
+    const result = definirTreinoSemanal(intensity, focus);
+    alert(result.message);
   };
 
   return (

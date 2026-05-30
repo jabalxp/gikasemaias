@@ -16,17 +16,11 @@ export const MatchSim: React.FC = () => {
   const [autoPlay, setAutoPlay] = useState(false);
   const feedEndRef = useRef<HTMLDivElement>(null);
 
-  if (!activeMatch) return null;
-
-  const teamA = teams[activeMatch.teamAId];
-  const teamB = teams[activeMatch.teamBId];
-
-  // Round atual simulado
-  const currentRoundData = activeMatch.rounds[activeMatchRoundIndex];
-
+  // IMPORTANTE: todos os hooks devem rodar antes de qualquer early return, senão o React
+  // crasha com "Rendered fewer hooks than expected" quando activeMatch passa a null.
   // Auto-play interval
   useEffect(() => {
-    let interval: any;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (autoPlay && isSimulatingMatch) {
       interval = setInterval(() => {
         const canAdvance = avancarRoundVisual();
@@ -43,7 +37,21 @@ export const MatchSim: React.FC = () => {
     feedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeMatchRoundIndex]);
 
+  if (!activeMatch) return null;
+
+  const teamA = teams[activeMatch.teamAId];
+  const teamB = teams[activeMatch.teamBId];
+
+  // Round atual simulado
+  const currentRoundData = activeMatch.rounds[activeMatchRoundIndex];
+
   if (!currentRoundData) return null;
+
+  // Placar ACUMULADO até o round exibido — evita vazar o resultado final (spoiler) durante a transmissão
+  const roundsAteAgora = activeMatch.rounds.slice(0, activeMatchRoundIndex + 1);
+  const liveScoreA = roundsAteAgora.filter(r => r.winningTeamId === activeMatch.teamAId).length;
+  const liveScoreB = roundsAteAgora.length - liveScoreA;
+  const isLastRound = activeMatchRoundIndex >= activeMatch.rounds.length - 1;
 
   // Mapeia jogadores dos times
   const teamAPlayers = Object.values(players).filter(p => p.teamId === activeMatch.teamAId && p.status === 'titular');
@@ -97,9 +105,9 @@ export const MatchSim: React.FC = () => {
             PARTIDA AO VIVO
           </span>
           <div className="flex items-center justify-center gap-6">
-            <span className="text-4xl font-black text-white text-neon-cyan">{activeMatch.scoreA}</span>
+            <span className="text-4xl font-black text-white text-neon-cyan">{liveScoreA}</span>
             <span className="text-slate-600 text-sm font-bold">X</span>
-            <span className="text-4xl font-black text-white text-neon-purple">{activeMatch.scoreB}</span>
+            <span className="text-4xl font-black text-white text-neon-purple">{liveScoreB}</span>
           </div>
           <span className="text-[10px] font-extrabold text-slate-400 bg-zinc-900 px-3 py-1 rounded border border-brand-border mt-2.5 inline-block">
             Mapa: de_{activeMatch.mapId.replace('de_', '')} • Round {currentRoundData.roundNumber}

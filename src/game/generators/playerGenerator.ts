@@ -14,8 +14,9 @@ const ROLES: Player['role'][] = ['AWPer', 'Rifler', 'Entry Fragger', 'Lurker', '
 
 const NATIONALITIES = ['Brasil', 'Argentina', 'Estados Unidos', 'França', 'Ucrânia', 'Rússia', 'Alemanha', 'Dinamarca', 'Suécia', 'Portugal', 'Mongólia', 'Turquia', 'Polônia', 'Finlândia'];
 
-// Auxiliar para gerar ID único
-const generateId = () => Math.random().toString(36).substr(2, 9);
+// Auxiliar para gerar ID único: contador monotônico + entropia (evita colisão de Math.random puro)
+let playerIdCounter = 0;
+const generateId = () => `gen_p_${(playerIdCounter++).toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 
 // Escolhe elemento aleatório de array
 const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
@@ -92,10 +93,10 @@ export const generatePlayer = (
     attributes[k] = Math.max(1, Math.min(99, attributes[k]));
   });
 
-  // Recalcula o overall real com base na média aritmética ponderada dos atributos
-  const calculatedOverall = Math.round(
+  // Recalcula o overall real com base na média aritmética dos atributos (clamp em 99)
+  const calculatedOverall = Math.min(99, Math.round(
     (attributes.aim + attributes.gamesense + attributes.clutch + attributes.utility + attributes.igl) / 5
-  );
+  ));
 
   // Valor de mercado ponderado: quanto mais jovem e com potencial maior, mais vale
   const ageFactor = Math.max(0.5, (35 - age) / 10); // Jovens multiplicam o valor

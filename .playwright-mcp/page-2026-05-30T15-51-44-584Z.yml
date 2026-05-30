@@ -1,0 +1,30 @@
+- generic [ref=e348]:
+  - generic [ref=e349]:
+    - text: Pré-Jogo
+    - heading "Sala de Preparação" [level=2] [ref=e350]
+  - generic [ref=e351]:
+    - generic [ref=e352]:
+      - generic [ref=e353]:
+        - generic [ref=e354]: FURIA
+        - paragraph [ref=e355]: FURIA
+        - generic [ref=e356]: "América do Sul • Rank #750"
+      - generic [ref=e357]:
+        - img [ref=e358]
+        - generic [ref=e367]: VS
+        - generic [ref=e368]: "Mapa: Dust2"
+      - generic [ref=e369]:
+        - generic [ref=e370]: MIBR
+        - paragraph [ref=e371]: MIBR
+        - generic [ref=e372]: "América do Sul • Rank #420"
+    - generic [ref=e373]:
+      - generic [ref=e374]:
+        - generic [ref=e375]: "Vitória FURIA: 51%"
+        - generic [ref=e376]: "Vitória MIBR: 49%"
+      - paragraph [ref=e380]: "Média de Overall — FURIA: 83 · MIBR: 80"
+  - generic [ref=e381]:
+    - button "Assistir Round a Round" [ref=e382]:
+      - img [ref=e383]
+      - generic [ref=e385]: Assistir Round a Round
+    - button "Simular Rápido" [ref=e386]:
+      - img [ref=e387]
+      - generic [ref=e390]: Simular Rápido
