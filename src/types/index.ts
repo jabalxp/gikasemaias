@@ -73,6 +73,7 @@ export interface Team {
   mapMastery: Record<string, number>; // ID do Mapa -> Porcentagem de domínio (0 - 100)
   colorPrimary: string;   // Cor Hexadecimal (ex: #00f0ff)
   colorSecondary: string; // Cor Hexadecimal (ex: #7000ff)
+  logoUrl?: string;       // Emblema enviado pelo usuário (opcional; fallback = emblema procedural)
   isUser: boolean;        // Se o jogador está controlando esta equipe
   stats: TeamStats;
   sponsorId?: string;               // Patrocinador ativo

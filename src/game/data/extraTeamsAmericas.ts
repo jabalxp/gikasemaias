@@ -1,0 +1,1046 @@
+import { Team, Player } from '../../types';
+
+// ============================================================
+// EXTRA TEAMS — AMÉRICAS (Brasil, América do Sul, América do Norte)
+// Times reais de CS2 que faltavam no dataset base (realTeams.ts).
+// Referência: Liquipedia / HLTV (cena 2025-26). A cena rotaciona rosters
+// com altíssima frequência; os dados são plausíveis e editáveis no jogo.
+//
+// IDs verificados como NÃO duplicados contra realTeams.ts.
+// Rosters reais somente para os times mais notórios; os demais ficam sem
+// jogadores (o jogo gera elencos automaticamente).
+//
+// Calibração de salário (mesma curva dos jogadores gerados):
+//   salary ≈ pow(max(0, ovr - 48), 2) * 0.85  →  faixa-alvo $400-2000/sem.
+// ============================================================
+
+export const extraTeamsAmericas: Record<string, Team> = {
+  // ------------------------------------------------------------
+  // AMÉRICA DO NORTE
+  // ------------------------------------------------------------
+  boss: {
+    id: 'boss',
+    name: 'BOSS',
+    tag: 'BOSS',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 3,
+    points: 200,
+    reputation: 60,
+    budget: 200000,
+    colorPrimary: '#0a84ff',
+    colorSecondary: '#0a0a0a',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'default',
+      utilityUsage: 'high',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 68, de_nuke: 62, de_inferno: 64, de_dust2: 70, de_ancient: 66, de_anubis: 68, de_overpass: 60
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  take_flyte: {
+    id: 'take_flyte',
+    name: 'Take Flyte',
+    tag: 'TKF',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 90,
+    reputation: 46,
+    budget: 100000,
+    colorPrimary: '#00c2ff',
+    colorSecondary: '#101820',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'pickoffs',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 60, de_nuke: 54, de_inferno: 56, de_dust2: 64, de_ancient: 56, de_anubis: 60, de_overpass: 52
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  limitless: {
+    id: 'limitless',
+    name: 'Limitless',
+    tag: 'LMTLS',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 110,
+    reputation: 48,
+    budget: 120000,
+    colorPrimary: '#a020f0',
+    colorSecondary: '#0d0d0d',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 62, de_nuke: 58, de_inferno: 58, de_dust2: 66, de_ancient: 60, de_anubis: 62, de_overpass: 56
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  mythic: {
+    id: 'mythic',
+    name: 'Mythic',
+    tag: 'MYT',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 70,
+    reputation: 44,
+    budget: 90000,
+    colorPrimary: '#e0b341',
+    colorSecondary: '#16121f',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'default',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 58, de_nuke: 54, de_inferno: 56, de_dust2: 60, de_ancient: 54, de_anubis: 58, de_overpass: 52
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  detonate: {
+    id: 'detonate',
+    name: 'DETONATE',
+    tag: 'DTN',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 80,
+    reputation: 45,
+    budget: 95000,
+    colorPrimary: '#ff5a1f',
+    colorSecondary: '#0a0a0a',
+    isUser: false,
+    tactics: {
+      playstyle: 'very_aggressive',
+      tempo: 'explosive',
+      focus: 'execute',
+      utilityUsage: 'low',
+      economyStyle: 'aggressive'
+    },
+    mapMastery: {
+      de_mirage: 60, de_nuke: 52, de_inferno: 54, de_dust2: 66, de_ancient: 56, de_anubis: 60, de_overpass: 50
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  marsborne: {
+    id: 'marsborne',
+    name: 'Marsborne',
+    tag: 'MBN',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 100,
+    reputation: 47,
+    budget: 110000,
+    colorPrimary: '#c0392b',
+    colorSecondary: '#101010',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'pickoffs',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 62, de_nuke: 56, de_inferno: 56, de_dust2: 66, de_ancient: 58, de_anubis: 62, de_overpass: 54
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  akimbo: {
+    id: 'akimbo',
+    name: 'Akimbo Esports',
+    tag: 'AKB',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 60,
+    reputation: 42,
+    budget: 80000,
+    colorPrimary: '#2ecc71',
+    colorSecondary: '#0d0d0d',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'default',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 56, de_nuke: 52, de_inferno: 54, de_dust2: 58, de_ancient: 52, de_anubis: 56, de_overpass: 50
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  carpe_diem: {
+    id: 'carpe_diem',
+    name: 'Carpe Diem',
+    tag: 'CD',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 55,
+    reputation: 41,
+    budget: 75000,
+    colorPrimary: '#1abc9c',
+    colorSecondary: '#111111',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 56, de_nuke: 50, de_inferno: 54, de_dust2: 60, de_ancient: 52, de_anubis: 56, de_overpass: 48
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  elevate: {
+    id: 'elevate',
+    name: 'Elevate',
+    tag: 'ELV',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 65,
+    reputation: 43,
+    budget: 85000,
+    colorPrimary: '#3498db',
+    colorSecondary: '#0b1626',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 58, de_nuke: 54, de_inferno: 56, de_dust2: 60, de_ancient: 54, de_anubis: 58, de_overpass: 52
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  timbermen: {
+    id: 'timbermen',
+    name: 'timbermen',
+    tag: 'TM',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 50,
+    reputation: 40,
+    budget: 70000,
+    colorPrimary: '#6b4f2a',
+    colorSecondary: '#0d0d0d',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'pickoffs',
+      utilityUsage: 'low',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 54, de_nuke: 50, de_inferno: 52, de_dust2: 60, de_ancient: 52, de_anubis: 54, de_overpass: 48
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  nouns: {
+    id: 'nouns',
+    name: 'Nouns Esports',
+    tag: 'NOUNS',
+    country: 'Estados Unidos',
+    region: 'América do Norte',
+    tier: 4,
+    points: 95,
+    reputation: 48,
+    budget: 100000,
+    colorPrimary: '#ff007a',
+    colorSecondary: '#101010',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 62, de_nuke: 56, de_inferno: 58, de_dust2: 64, de_ancient: 58, de_anubis: 62, de_overpass: 54
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+
+  // ------------------------------------------------------------
+  // AMÉRICA DO SUL / BRASIL
+  // ------------------------------------------------------------
+  keyd: {
+    id: 'keyd',
+    name: 'Vivo Keyd Stars',
+    tag: 'Keyd',
+    country: 'Brasil',
+    region: 'América do Sul',
+    tier: 3,
+    points: 190,
+    reputation: 62,
+    budget: 220000,
+    colorPrimary: '#7d3cff',
+    colorSecondary: '#0a0a0a',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'execute',
+      utilityUsage: 'high',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 70, de_nuke: 62, de_inferno: 66, de_dust2: 68, de_ancient: 68, de_anubis: 70, de_overpass: 60
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  kru: {
+    id: 'kru',
+    name: 'KRÜ Esports',
+    tag: 'KRÜ',
+    country: 'Argentina',
+    region: 'América do Sul',
+    tier: 3,
+    points: 170,
+    reputation: 61,
+    budget: 200000,
+    colorPrimary: '#ffd200',
+    colorSecondary: '#0a0a0a',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'pickoffs',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 66, de_nuke: 58, de_inferno: 62, de_dust2: 70, de_ancient: 64, de_anubis: 68, de_overpass: 56
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  dusty: {
+    id: 'dusty',
+    name: 'Dusty Roots',
+    tag: 'DR',
+    country: 'Brasil',
+    region: 'América do Sul',
+    tier: 4,
+    points: 120,
+    reputation: 50,
+    budget: 120000,
+    colorPrimary: '#a86b32',
+    colorSecondary: '#101010',
+    isUser: false,
+    tactics: {
+      playstyle: 'aggressive',
+      tempo: 'fast',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'force'
+    },
+    mapMastery: {
+      de_mirage: 62, de_nuke: 56, de_inferno: 58, de_dust2: 66, de_ancient: 60, de_anubis: 64, de_overpass: 54
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  yawara: {
+    id: 'yawara',
+    name: 'Yawara Esports',
+    tag: 'YWR',
+    country: 'Brasil',
+    region: 'América do Sul',
+    tier: 4,
+    points: 90,
+    reputation: 46,
+    budget: 95000,
+    colorPrimary: '#00b894',
+    colorSecondary: '#0d0d0d',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'default',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 58, de_nuke: 54, de_inferno: 56, de_dust2: 62, de_ancient: 56, de_anubis: 60, de_overpass: 52
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  isurus: {
+    id: 'isurus',
+    name: 'Isurus',
+    tag: 'ISG',
+    country: 'Argentina',
+    region: 'América do Sul',
+    tier: 4,
+    points: 100,
+    reputation: 49,
+    budget: 110000,
+    colorPrimary: '#1e90ff',
+    colorSecondary: '#08111d',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'execute',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 60, de_nuke: 56, de_inferno: 58, de_dust2: 64, de_ancient: 58, de_anubis: 62, de_overpass: 54
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  },
+  intz: {
+    id: 'intz',
+    name: 'INTZ',
+    tag: 'INTZ',
+    country: 'Brasil',
+    region: 'América do Sul',
+    tier: 4,
+    points: 70,
+    reputation: 45,
+    budget: 90000,
+    colorPrimary: '#e74c3c',
+    colorSecondary: '#0d0d0d',
+    isUser: false,
+    tactics: {
+      playstyle: 'balanced',
+      tempo: 'normal',
+      focus: 'default',
+      utilityUsage: 'medium',
+      economyStyle: 'balanced'
+    },
+    mapMastery: {
+      de_mirage: 58, de_nuke: 52, de_inferno: 54, de_dust2: 60, de_ancient: 54, de_anubis: 58, de_overpass: 50
+    },
+    stats: { wins: 0, losses: 0, titles: 0, recentForm: [] },
+    staff: {}
+  }
+};
+
+// ============================================================
+// JOGADORES — apenas para os times mais notórios das Américas.
+// Demais times sem roster: o jogo gera elencos automaticamente.
+// IDs únicos (sufixados quando o nick poderia colidir).
+// ============================================================
+
+export const extraPlayersAmericas: Player[] = [
+  // ------------------------------------------------------------
+  // BOSS (tier 3) — FaNg, Fruitcupx, SLIGHT, stanislaw, Bwills
+  // ------------------------------------------------------------
+  {
+    id: 'fang_boss',
+    nickname: 'FaNg',
+    name: 'Justin Coakley',
+    nationality: 'Canadá',
+    age: 23,
+    teamId: 'boss',
+    role: 'Rifler',
+    subRoles: ['Entry Fragger'],
+    overall: 74,
+    potential: 80,
+    value: 130000,
+    salary: 580,
+    contractMonths: 18,
+    moral: 80,
+    form: 82,
+    energy: 95,
+    personality: 'Explosivo',
+    attributes: { aim: 78, gamesense: 72, clutch: 73, utility: 71, igl: 42 },
+    stats: { rating: 1.02, kills: 0, deaths: 0, assists: 0, adr: 75, kast: 70, hsPercentage: 49, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'stanislaw_boss',
+    nickname: 'stanislaw',
+    name: 'Peter Jarguz',
+    nationality: 'Canadá',
+    age: 32,
+    teamId: 'boss',
+    role: 'IGL',
+    subRoles: ['Support'],
+    overall: 73,
+    potential: 73,
+    value: 90000,
+    salary: 520,
+    contractMonths: 12,
+    moral: 82,
+    form: 78,
+    energy: 90,
+    personality: 'Líder',
+    attributes: { aim: 70, gamesense: 80, clutch: 74, utility: 76, igl: 88 },
+    stats: { rating: 0.96, kills: 0, deaths: 0, assists: 0, adr: 68, kast: 71, hsPercentage: 44, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'fruitcupx_boss',
+    nickname: 'Fruitcupx',
+    name: 'Brandon Hill',
+    nationality: 'Estados Unidos',
+    age: 22,
+    teamId: 'boss',
+    role: 'AWPer',
+    subRoles: ['Clutcher'],
+    overall: 72,
+    potential: 79,
+    value: 110000,
+    salary: 480,
+    contractMonths: 24,
+    moral: 80,
+    form: 79,
+    energy: 97,
+    personality: 'Calmo',
+    attributes: { aim: 76, gamesense: 71, clutch: 75, utility: 70, igl: 36 },
+    stats: { rating: 1.00, kills: 0, deaths: 0, assists: 0, adr: 71, kast: 70, hsPercentage: 18, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'slight_boss',
+    nickname: 'SLIGHT',
+    name: 'Daniel Hesterberg',
+    nationality: 'Estados Unidos',
+    age: 23,
+    teamId: 'boss',
+    role: 'Rifler',
+    subRoles: ['Lurker'],
+    overall: 71,
+    potential: 78,
+    value: 90000,
+    salary: 460,
+    contractMonths: 18,
+    moral: 80,
+    form: 78,
+    energy: 95,
+    personality: 'Focado',
+    attributes: { aim: 73, gamesense: 73, clutch: 74, utility: 72, igl: 42 },
+    stats: { rating: 0.98, kills: 0, deaths: 0, assists: 0, adr: 70, kast: 70, hsPercentage: 47, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'bwills_boss',
+    nickname: 'Bwills',
+    name: 'Brandon Williams',
+    nationality: 'Estados Unidos',
+    age: 24,
+    teamId: 'boss',
+    role: 'Support',
+    subRoles: ['Rifler'],
+    overall: 70,
+    potential: 76,
+    value: 80000,
+    salary: 460,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 94,
+    personality: 'Calmo',
+    attributes: { aim: 70, gamesense: 72, clutch: 72, utility: 77, igl: 44 },
+    stats: { rating: 0.95, kills: 0, deaths: 0, assists: 0, adr: 68, kast: 70, hsPercentage: 42, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+
+  // ------------------------------------------------------------
+  // Vivo Keyd Stars (tier 3) — CutzMeretz, matios, xureba, lash, ninjaZ
+  // ------------------------------------------------------------
+  {
+    id: 'cutzmeretz_keyd',
+    nickname: 'CutzMeretz',
+    name: 'Lucas Cunha',
+    nationality: 'Brasil',
+    age: 22,
+    teamId: 'keyd',
+    role: 'Rifler',
+    subRoles: ['Entry Fragger'],
+    overall: 74,
+    potential: 81,
+    value: 130000,
+    salary: 580,
+    contractMonths: 24,
+    moral: 81,
+    form: 80,
+    energy: 96,
+    personality: 'Explosivo',
+    attributes: { aim: 78, gamesense: 72, clutch: 73, utility: 72, igl: 40 },
+    stats: { rating: 1.02, kills: 0, deaths: 0, assists: 0, adr: 75, kast: 70, hsPercentage: 49, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'matios_keyd',
+    nickname: 'matios',
+    name: 'Matheus Souza',
+    nationality: 'Brasil',
+    age: 23,
+    teamId: 'keyd',
+    role: 'AWPer',
+    subRoles: ['Clutcher'],
+    overall: 73,
+    potential: 80,
+    value: 120000,
+    salary: 520,
+    contractMonths: 24,
+    moral: 80,
+    form: 79,
+    energy: 96,
+    personality: 'Calmo',
+    attributes: { aim: 77, gamesense: 71, clutch: 76, utility: 70, igl: 36 },
+    stats: { rating: 1.00, kills: 0, deaths: 0, assists: 0, adr: 71, kast: 71, hsPercentage: 17, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'xureba_keyd',
+    nickname: 'xureba',
+    name: 'Pedro Henrique',
+    nationality: 'Brasil',
+    age: 21,
+    teamId: 'keyd',
+    role: 'Rifler',
+    subRoles: ['Lurker'],
+    overall: 72,
+    potential: 80,
+    value: 110000,
+    salary: 480,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 97,
+    personality: 'Focado',
+    attributes: { aim: 74, gamesense: 73, clutch: 74, utility: 72, igl: 40 },
+    stats: { rating: 0.99, kills: 0, deaths: 0, assists: 0, adr: 72, kast: 70, hsPercentage: 47, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'lash_keyd',
+    nickname: 'lash',
+    name: 'Lucas Nidá',
+    nationality: 'Brasil',
+    age: 24,
+    teamId: 'keyd',
+    role: 'IGL',
+    subRoles: ['Support'],
+    overall: 71,
+    potential: 75,
+    value: 90000,
+    salary: 460,
+    contractMonths: 18,
+    moral: 82,
+    form: 78,
+    energy: 92,
+    personality: 'Líder',
+    attributes: { aim: 70, gamesense: 76, clutch: 73, utility: 76, igl: 81 },
+    stats: { rating: 0.95, kills: 0, deaths: 0, assists: 0, adr: 68, kast: 71, hsPercentage: 42, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'ninjaz_keyd',
+    nickname: 'ninjaZ',
+    name: 'Caíque Marcelino',
+    nationality: 'Brasil',
+    age: 23,
+    teamId: 'keyd',
+    role: 'Support',
+    subRoles: ['Rifler'],
+    overall: 71,
+    potential: 78,
+    value: 90000,
+    salary: 460,
+    contractMonths: 18,
+    moral: 80,
+    form: 78,
+    energy: 95,
+    personality: 'Calmo',
+    attributes: { aim: 72, gamesense: 73, clutch: 73, utility: 78, igl: 44 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 70, kast: 70, hsPercentage: 44, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+
+  // ------------------------------------------------------------
+  // KRÜ Esports (tier 3) — reversive, buda, righi, Misfit, trindade
+  // (buda já existe em BESTIA no dataset base; aqui usamos id único)
+  // ------------------------------------------------------------
+  {
+    id: 'reversive_kru',
+    nickname: 'reversive',
+    name: 'Bruno Cunha',
+    nationality: 'Brasil',
+    age: 23,
+    teamId: 'kru',
+    role: 'AWPer',
+    subRoles: ['Star Player'],
+    overall: 73,
+    potential: 81,
+    value: 130000,
+    salary: 520,
+    contractMonths: 24,
+    moral: 81,
+    form: 80,
+    energy: 96,
+    personality: 'Focado',
+    attributes: { aim: 78, gamesense: 72, clutch: 75, utility: 70, igl: 36 },
+    stats: { rating: 1.02, kills: 0, deaths: 0, assists: 0, adr: 74, kast: 70, hsPercentage: 19, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'buda_kru',
+    nickname: 'buda',
+    name: 'Nicolás Kramer',
+    nationality: 'Argentina',
+    age: 24,
+    teamId: 'kru',
+    role: 'IGL',
+    subRoles: ['Support'],
+    overall: 72,
+    potential: 76,
+    value: 90000,
+    salary: 480,
+    contractMonths: 18,
+    moral: 82,
+    form: 78,
+    energy: 92,
+    personality: 'Líder',
+    attributes: { aim: 70, gamesense: 77, clutch: 73, utility: 76, igl: 82 },
+    stats: { rating: 0.95, kills: 0, deaths: 0, assists: 0, adr: 68, kast: 71, hsPercentage: 42, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'righi_kru',
+    nickname: 'righi',
+    name: 'Lautaro Righi',
+    nationality: 'Argentina',
+    age: 22,
+    teamId: 'kru',
+    role: 'Rifler',
+    subRoles: ['Entry Fragger'],
+    overall: 71,
+    potential: 79,
+    value: 100000,
+    salary: 460,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 97,
+    personality: 'Explosivo',
+    attributes: { aim: 74, gamesense: 71, clutch: 72, utility: 71, igl: 38 },
+    stats: { rating: 0.98, kills: 0, deaths: 0, assists: 0, adr: 73, kast: 69, hsPercentage: 48, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'misfit_kru',
+    nickname: 'Misfit',
+    name: 'Joaquín Fernández',
+    nationality: 'Argentina',
+    age: 21,
+    teamId: 'kru',
+    role: 'Rifler',
+    subRoles: ['Lurker'],
+    overall: 70,
+    potential: 78,
+    value: 90000,
+    salary: 460,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 98,
+    personality: 'Calmo',
+    attributes: { aim: 72, gamesense: 72, clutch: 73, utility: 72, igl: 40 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 70, kast: 70, hsPercentage: 46, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'trindade_kru',
+    nickname: 'trindade',
+    name: 'Gabriel Trindade',
+    nationality: 'Brasil',
+    age: 22,
+    teamId: 'kru',
+    role: 'Support',
+    subRoles: ['Rifler'],
+    overall: 70,
+    potential: 77,
+    value: 80000,
+    salary: 460,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 96,
+    personality: 'Calmo',
+    attributes: { aim: 70, gamesense: 72, clutch: 72, utility: 77, igl: 44 },
+    stats: { rating: 0.95, kills: 0, deaths: 0, assists: 0, adr: 68, kast: 70, hsPercentage: 43, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+
+  // ------------------------------------------------------------
+  // Limitless (tier 4) — DJF, Cyrix, Tender, Sandman, Seb
+  // ------------------------------------------------------------
+  {
+    id: 'djf_lmtls',
+    nickname: 'DJF',
+    name: 'Daniel Foster',
+    nationality: 'Estados Unidos',
+    age: 22,
+    teamId: 'limitless',
+    role: 'Rifler',
+    subRoles: ['Entry Fragger'],
+    overall: 69,
+    potential: 77,
+    value: 70000,
+    salary: 410,
+    contractMonths: 18,
+    moral: 80,
+    form: 78,
+    energy: 97,
+    personality: 'Explosivo',
+    attributes: { aim: 72, gamesense: 69, clutch: 70, utility: 69, igl: 38 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 72, kast: 68, hsPercentage: 48, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'cyrix_lmtls',
+    nickname: 'Cyrix',
+    name: 'Cyrus Anderson',
+    nationality: 'Estados Unidos',
+    age: 21,
+    teamId: 'limitless',
+    role: 'AWPer',
+    subRoles: ['Clutcher'],
+    overall: 68,
+    potential: 77,
+    value: 70000,
+    salary: 400,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 98,
+    personality: 'Calmo',
+    attributes: { aim: 73, gamesense: 67, clutch: 72, utility: 66, igl: 34 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 69, kast: 69, hsPercentage: 17, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'tender_lmtls',
+    nickname: 'Tender',
+    name: 'Tyler Reed',
+    nationality: 'Estados Unidos',
+    age: 23,
+    teamId: 'limitless',
+    role: 'Rifler',
+    subRoles: ['Lurker'],
+    overall: 67,
+    potential: 74,
+    value: 60000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 95,
+    personality: 'Focado',
+    attributes: { aim: 70, gamesense: 68, clutch: 70, utility: 68, igl: 40 },
+    stats: { rating: 0.96, kills: 0, deaths: 0, assists: 0, adr: 69, kast: 69, hsPercentage: 47, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'sandman_lmtls',
+    nickname: 'Sandman',
+    name: 'Sam Murphy',
+    nationality: 'Estados Unidos',
+    age: 24,
+    teamId: 'limitless',
+    role: 'IGL',
+    subRoles: ['Support'],
+    overall: 67,
+    potential: 71,
+    value: 55000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 81,
+    form: 77,
+    energy: 92,
+    personality: 'Líder',
+    attributes: { aim: 65, gamesense: 73, clutch: 70, utility: 73, igl: 78 },
+    stats: { rating: 0.93, kills: 0, deaths: 0, assists: 0, adr: 66, kast: 69, hsPercentage: 41, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'seb_lmtls',
+    nickname: 'Seb',
+    name: 'Sebastian Carter',
+    nationality: 'Estados Unidos',
+    age: 22,
+    teamId: 'limitless',
+    role: 'Support',
+    subRoles: ['Rifler'],
+    overall: 66,
+    potential: 74,
+    value: 55000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 96,
+    personality: 'Calmo',
+    attributes: { aim: 67, gamesense: 69, clutch: 69, utility: 74, igl: 44 },
+    stats: { rating: 0.93, kills: 0, deaths: 0, assists: 0, adr: 66, kast: 69, hsPercentage: 42, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+
+  // ------------------------------------------------------------
+  // Dusty Roots (tier 4) — roster genérico plausível BR (sem nicks reais confirmados)
+  // ------------------------------------------------------------
+  {
+    id: 'dusty_entry',
+    nickname: 'rootz',
+    name: 'Matheus Almeida',
+    nationality: 'Brasil',
+    age: 21,
+    teamId: 'dusty',
+    role: 'Entry Fragger',
+    subRoles: ['Rifler'],
+    overall: 69,
+    potential: 78,
+    value: 75000,
+    salary: 410,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 98,
+    personality: 'Explosivo',
+    attributes: { aim: 72, gamesense: 69, clutch: 70, utility: 69, igl: 38 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 72, kast: 68, hsPercentage: 48, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'dusty_awp',
+    nickname: 'soil',
+    name: 'Gabriel Ferreira',
+    nationality: 'Brasil',
+    age: 22,
+    teamId: 'dusty',
+    role: 'AWPer',
+    subRoles: ['Clutcher'],
+    overall: 68,
+    potential: 77,
+    value: 70000,
+    salary: 400,
+    contractMonths: 24,
+    moral: 80,
+    form: 78,
+    energy: 97,
+    personality: 'Calmo',
+    attributes: { aim: 73, gamesense: 67, clutch: 72, utility: 66, igl: 34 },
+    stats: { rating: 0.97, kills: 0, deaths: 0, assists: 0, adr: 69, kast: 69, hsPercentage: 18, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'dusty_igl',
+    nickname: 'terra',
+    name: 'Rafael Lima',
+    nationality: 'Brasil',
+    age: 25,
+    teamId: 'dusty',
+    role: 'IGL',
+    subRoles: ['Support'],
+    overall: 67,
+    potential: 71,
+    value: 55000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 81,
+    form: 77,
+    energy: 92,
+    personality: 'Líder',
+    attributes: { aim: 65, gamesense: 73, clutch: 70, utility: 73, igl: 79 },
+    stats: { rating: 0.93, kills: 0, deaths: 0, assists: 0, adr: 66, kast: 69, hsPercentage: 41, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'dusty_lurker',
+    nickname: 'raiz',
+    name: 'Lucas Moraes',
+    nationality: 'Brasil',
+    age: 23,
+    teamId: 'dusty',
+    role: 'Lurker',
+    subRoles: ['Rifler'],
+    overall: 67,
+    potential: 75,
+    value: 60000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 95,
+    personality: 'Focado',
+    attributes: { aim: 70, gamesense: 69, clutch: 71, utility: 69, igl: 40 },
+    stats: { rating: 0.96, kills: 0, deaths: 0, assists: 0, adr: 69, kast: 69, hsPercentage: 46, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  },
+  {
+    id: 'dusty_support',
+    nickname: 'broto',
+    name: 'Felipe Souza',
+    nationality: 'Brasil',
+    age: 22,
+    teamId: 'dusty',
+    role: 'Support',
+    subRoles: ['Rifler'],
+    overall: 66,
+    potential: 74,
+    value: 55000,
+    salary: 400,
+    contractMonths: 18,
+    moral: 80,
+    form: 77,
+    energy: 96,
+    personality: 'Calmo',
+    attributes: { aim: 67, gamesense: 69, clutch: 69, utility: 74, igl: 44 },
+    stats: { rating: 0.93, kills: 0, deaths: 0, assists: 0, adr: 66, kast: 69, hsPercentage: 42, clutchesWon: 0, firstKills: 0, firstDeaths: 0, mapsPlayed: 0, mvps: 0 },
+    status: 'titular'
+  }
+];

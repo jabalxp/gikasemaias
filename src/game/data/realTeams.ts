@@ -1,6 +1,8 @@
 import { Team } from '../../types';
+import { extraTeamsAmericas } from './extraTeamsAmericas';
+import { extraTeamsWorld } from './extraTeamsWorld';
 
-export const realTeams: Record<string, Team> = {
+const baseTeams: Record<string, Team> = {
   // BRASILEIROS E SUL-AMERICANOS (Obrigatórios)
   furia: {
     id: 'furia',
@@ -1669,3 +1671,5 @@ export const realTeams: Record<string, Team> = {
     staff: {}
   }
 };
+
+export const realTeams: Record<string, Team> = { ...baseTeams, ...extraTeamsAmericas, ...extraTeamsWorld };

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { Shield, Target, Play, FastForward, Skull, Award } from 'lucide-react';
+import { TeamCrest } from '../components/ui/TeamCrest';
 
 export const MatchSim: React.FC = () => {
   const {
@@ -85,12 +86,7 @@ export const MatchSim: React.FC = () => {
 
         {/* TIME A */}
         <div className="flex items-center gap-4 w-1/3">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-black text-base text-brand-dark"
-            style={{ backgroundColor: teamA.colorPrimary, color: teamA.colorPrimary === '#ffffff' ? '#000' : '#fff' }}
-          >
-            {teamA.tag}
-          </div>
+          <TeamCrest team={teamA} size={48} />
           <div>
             <h3 className="text-sm font-black text-white">{teamA.name}</h3>
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
@@ -122,12 +118,7 @@ export const MatchSim: React.FC = () => {
               {teamB.region} • Rank #{teamB.points}
             </span>
           </div>
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-black text-base text-brand-dark"
-            style={{ backgroundColor: teamB.colorPrimary, color: teamB.colorPrimary === '#ffffff' ? '#000' : '#fff' }}
-          >
-            {teamB.tag}
-          </div>
+          <TeamCrest team={teamB} size={48} />
         </div>
       </div>
 

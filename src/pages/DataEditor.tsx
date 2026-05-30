@@ -1,15 +1,68 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { Player } from '../types';
-import { Search, Save, Edit3, Trash2, UserPlus, RotateCcw } from 'lucide-react';
+import { Search, Save, Edit3, Trash2, UserPlus, RotateCcw, ImageUp, Shield } from 'lucide-react';
 import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { TeamCrest } from '../components/ui/TeamCrest';
+
+/** Limite do upload de logo (256 KB) — dataURLs grandes incham o save em localStorage. */
+const MAX_LOGO_BYTES = 256 * 1024;
 
 export const DataEditor: React.FC = () => {
-  const { players, teams, resetarDadosEditor, addToast, editarJogador } = useGameStore();
+  const { players, teams, resetarDadosEditor, addToast, editarJogador, editarTimeLogo } = useGameStore();
 
   const [search, setSearch] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // Editor de emblema de time
+  const teamList = Object.values(teams).filter(t => t.id !== 'free_agents');
+  const [logoTeamId, setLogoTeamId] = useState<string>(teamList[0]?.id ?? '');
+  const [logoUrlInput, setLogoUrlInput] = useState('');
+  const selectedLogoTeam = teams[logoTeamId];
+
+  const handleSelectLogoTeam = (teamId: string): void => {
+    setLogoTeamId(teamId);
+    setLogoUrlInput(teams[teamId]?.logoUrl ?? '');
+  };
+
+  const handleSaveLogoUrl = (): void => {
+    if (!selectedLogoTeam) return;
+    editarTimeLogo(selectedLogoTeam.id, logoUrlInput);
+    addToast(
+      logoUrlInput.trim().length > 0
+        ? `Emblema de ${selectedLogoTeam.name} atualizado.`
+        : `Emblema de ${selectedLogoTeam.name} removido (volta ao procedural).`,
+      'success',
+    );
+  };
+
+  const handleLogoFile = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0];
+    if (!file || !selectedLogoTeam) return;
+    if (!file.type.startsWith('image/')) {
+      addToast('Selecione um arquivo de imagem válido.', 'error');
+      return;
+    }
+    if (file.size > MAX_LOGO_BYTES) {
+      addToast('Imagem muito grande (máx. 256 KB). Use uma versão menor.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (): void => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
+      if (dataUrl.length === 0) {
+        addToast('Falha ao ler a imagem.', 'error');
+        return;
+      }
+      setLogoUrlInput(dataUrl);
+      editarTimeLogo(selectedLogoTeam.id, dataUrl);
+      addToast(`Emblema de ${selectedLogoTeam.name} enviado.`, 'success');
+    };
+    reader.onerror = (): void => addToast('Falha ao ler a imagem.', 'error');
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
 
   // Estados locais do editor do jogador selecionado
   const [nick, setNick] = useState('');
@@ -225,6 +278,74 @@ export const DataEditor: React.FC = () => {
         </div>
 
       </div>
+
+      {/* PAINEL: EMBLEMA DE TIME (logoUrl) */}
+      {selectedLogoTeam && (
+        <div className="bg-brand-card border border-brand-border p-5 rounded-2xl">
+          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-brand-border pb-2 flex items-center gap-2 mb-4">
+            <Shield className="w-4 h-4 text-brand-purple" />
+            <span>Emblema do Time</span>
+          </h3>
+
+          <div className="flex flex-col md:flex-row gap-5 items-start">
+            {/* PREVIEW */}
+            <div className="flex flex-col items-center gap-2 shrink-0">
+              <TeamCrest team={selectedLogoTeam} size={80} shape="rounded" />
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{selectedLogoTeam.tag}</span>
+            </div>
+
+            {/* CONTROLES */}
+            <div className="flex-1 w-full space-y-3">
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Time</label>
+                <select
+                  value={logoTeamId}
+                  onChange={(e) => handleSelectLogoTeam(e.target.value)}
+                  className="w-full bg-zinc-950 border border-brand-border text-xs font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-cyan"
+                >
+                  {teamList.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">URL do Emblema</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    placeholder="https://… (deixe vazio para usar o procedural)"
+                    value={logoUrlInput}
+                    onChange={(e) => setLogoUrlInput(e.target.value)}
+                    className="flex-1 min-w-0 bg-zinc-950 border border-brand-border rounded-lg px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-brand-cyan"
+                  />
+                  <button
+                    onClick={handleSaveLogoUrl}
+                    className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[11px] font-extrabold bg-brand-cyan text-brand-dark hover:bg-brand-cyan/85 transition-colors uppercase tracking-wider shrink-0"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Salvar</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ou enviar arquivo (máx. 256 KB)</label>
+                <label className="flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold border border-brand-border bg-zinc-950/40 text-slate-300 hover:border-brand-purple/40 hover:text-white transition-colors cursor-pointer w-fit">
+                  <ImageUp className="w-4 h-4 text-brand-purple" />
+                  <span>Escolher imagem…</span>
+                  <input type="file" accept="image/*" onChange={handleLogoFile} className="hidden" />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DISCLAIMER FAN-MADE */}
+      <p className="text-center text-[10px] font-semibold text-slate-600 uppercase tracking-widest pt-2">
+        Projeto fan-made não-oficial, sem afiliação. Marcas e nomes pertencem a seus donos.
+      </p>
 
       <ConfirmModal
         open={confirmReset}

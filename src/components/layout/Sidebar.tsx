@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGameStore } from '../../store/useGameStore';
+import { TeamCrest } from '../ui/TeamCrest';
 import {
   LayoutDashboard,
   Users,
@@ -81,16 +82,7 @@ export const Sidebar: React.FC = () => {
       {/* RODA PÉ DA SIDEBAR - INFORMAÇÃO DO TIME */}
       <div className="border-t border-brand-border pt-4">
         <div className="flex items-center gap-3 px-2">
-          <div
-            className="w-8 h-8 rounded-full border flex items-center justify-center font-extrabold text-sm text-brand-dark"
-            style={{
-              backgroundColor: userTeam.colorPrimary,
-              borderColor: userTeam.colorSecondary,
-              color: userTeam.colorPrimary === '#ffffff' ? '#000' : '#fff'
-            }}
-          >
-            {userTeam.tag.slice(0, 2)}
-          </div>
+          <TeamCrest team={userTeam} size={32} />
           <div className="overflow-hidden">
             <p className="text-sm font-bold text-white truncate">{userTeam.name}</p>
             <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">

@@ -104,8 +104,10 @@ export const generatePlayer = (
   const baseValue = Math.pow(calculatedOverall - 40, 3) * 0.15; // Escala exponencial
   const value = Math.max(5000, Math.round(baseValue * ageFactor * potentialFactor));
 
-  // Salário semanal baseado no overall
-  const salary = Math.max(500, Math.round(Math.pow(calculatedOverall - 45, 2) * 1.5 + randomRange(-100, 300)));
+  // Salário semanal baseado no overall. Curva suavizada (coeficiente 0.85 e base de
+  // subtração mais alta) para não explodir a folha de jogadores gerados — a receita base
+  // por tier precisa cobrir um elenco competente. Ainda cresce com o overall, mas devagar.
+  const salary = Math.max(400, Math.round(Math.pow(Math.max(0, calculatedOverall - 48), 2) * 0.85 + randomRange(-100, 200)));
 
   return {
     id: generateId(),

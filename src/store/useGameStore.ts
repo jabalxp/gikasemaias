@@ -73,6 +73,41 @@ const crownAiChampion = (
   return { championId, championTeam, news };
 };
 
+/**
+ * Recompõe os participantes elegíveis de um torneio com base no tier dos times, garantindo
+ * sempre a vaga do time do usuário no torneio do seu tier (senão ele nunca jogaria).
+ *
+ * Função pura: não muta `teams` nem o `tournament`. Reusada na criação da carreira
+ * (`iniciarCarreira`) e na virada de temporada (após promoção/rebaixamento de tier), para
+ * que a mudança de divisão do usuário se reflita imediatamente nas vagas dos torneios.
+ *
+ * Critério de elegibilidade: time do mesmo tier do torneio; no tier 1 (Elite), também os de
+ * tier 2 (Challenger) podem disputar. Limita a 16 vagas no Major Mundial e 8 nos demais.
+ *
+ * @param tournament    Torneio-alvo (somente leitura).
+ * @param teams         Mapa atual de times (não é mutado).
+ * @param userTeamId    Id do time do usuário (terá vaga garantida se elegível).
+ * @returns Lista de teamIds elegíveis para o torneio.
+ */
+const computeTournamentTeamIds = (
+  tournament: Pick<Tournament, 'id' | 'tier'>,
+  teams: Record<string, Team>,
+  userTeamId: string
+): string[] => {
+  const eligibleTeams = Object.values(teams)
+    .filter((team) => team.tier === tournament.tier || (tournament.tier === 1 && team.tier <= 2))
+    .map((team) => team.id);
+
+  const limit = tournament.id === 'major_mundial' ? 16 : 8;
+  const teamIds = eligibleTeams.slice(0, limit);
+
+  // Garante a vaga do time do usuário no torneio do seu tier (senão ele nunca jogaria).
+  if (eligibleTeams.includes(userTeamId) && !teamIds.includes(userTeamId)) {
+    teamIds[teamIds.length - 1] = userTeamId;
+  }
+  return teamIds;
+};
+
 // ===== NEGOCIAÇÃO DE TRANSFERÊNCIAS =====
 // Resultado puro da avaliação de interesse (sem efeitos colaterais nem checagem de caixa).
 interface NegotiationEvaluation {
@@ -190,6 +225,7 @@ interface GameState {
     customTeamData?: { name: string; tag: string; colorPrimary: string; colorSecondary: string }
   ) => void;
   avancarSemana: () => void;
+  avancarAtePartida: () => void; // Avança semanas em sequência até abrir a próxima partida do usuário
   definirTitular: (playerId: string, status: 'titular' | 'reserva') => void;
   definirPapelEspecial: (playerId: string, roleType: 'IGL' | 'AWPer' | 'Rifler') => void;
   definirTaticas: (tactics: Team['tactics']) => void;
@@ -207,6 +243,7 @@ interface GameState {
   investirNaBase: () => { success: boolean; message: string };
   promoverJovem: (playerId: string) => { success: boolean; message: string };
   editarJogador: (playerId: string, patch: Partial<Player>) => void;
+  editarTimeLogo: (teamId: string, logoUrl: string) => void;
   setScreen: (screen: string) => void;
   setSelectedPlayerId: (id: string | null) => void;
   addToast: (message: string, type?: ToastType) => void;
@@ -376,17 +413,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const tournamentsData = {} as Record<string, Tournament>;
     defaultCompetitions.forEach((t) => {
       const copyT = JSON.parse(JSON.stringify(t)) as Tournament;
-      // Preenche os times participantes baseados no tier do torneio
-      const eligibleTeams = Object.values(teamsData)
-        .filter((team) => team.tier === t.tier || (t.tier === 1 && team.tier <= 2))
-        .map((team) => team.id);
-      
-      // Limita quantidade de times conforme o tier
-      copyT.teamIds = eligibleTeams.slice(0, t.id === 'major_mundial' ? 16 : 8);
-      // Garante a vaga do time do usuário no torneio do seu tier (senão ele nunca jogaria)
-      if (eligibleTeams.includes(finalUserTeamId) && !copyT.teamIds.includes(finalUserTeamId)) {
-        copyT.teamIds[copyT.teamIds.length - 1] = finalUserTeamId;
-      }
+      // Preenche os participantes elegíveis pelo tier, garantindo a vaga do usuário.
+      copyT.teamIds = computeTournamentTeamIds(t, teamsData, finalUserTeamId);
       tournamentsData[t.id] = copyT;
     });
 
@@ -466,9 +494,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       income += sp.weeklyIncome;
     }
 
-    // Receita operacional base (bilheteria/conteúdo/loja), proporcional à reputação —
-    // dá sustentabilidade ao time mesmo sem patrocínio assinado (objetivo: jogo sustentável).
-    const baseIncome = Math.round(userTeam.reputation * 300);
+    // Receita operacional base (bilheteria/conteúdo/loja). Combina um PISO por tier
+    // (estrutura/contratos fixos da organização, independente da reputação atual) com uma
+    // parcela proporcional à reputação. Dá sustentabilidade ao time mesmo sem patrocínio
+    // assinado: um elenco competente fecha o net semanal >= 0 (objetivo: jogo sustentável).
+    const tierBaseFloor: Record<Team['tier'], number> = {
+      1: 40000,
+      2: 22000,
+      3: 12000,
+      4: 7000,
+    };
+    const baseIncome = Math.round(userTeam.reputation * 500) + tierBaseFloor[userTeam.tier];
     income += baseIncome;
 
     // Despesa de salários de jogadores ativos e staff
@@ -689,6 +725,50 @@ export const useGameStore = create<GameState>((set, get) => ({
           };
         });
 
+      // 1b. PROMOÇÃO / REBAIXAMENTO DE TIER DO USUÁRIO (motor de progressão).
+      // Critério de desempenho da temporada encerrada (stats são acumulados de carreira, então
+      // subtraímos os totais das temporadas anteriores para isolar o delta DESTA temporada).
+      const userTeamBeforeTier = updatedTeams[userTeamId];
+      const promotionNews: NewsItem[] = [];
+      if (userTeamBeforeTier) {
+        const prevSeasonTotals = historicoTemporadas
+          .filter(h => h.season !== currentSeason)
+          .reduce((acc, h) => ({ w: acc.w + h.userWins, l: acc.l + h.userLosses }), { w: 0, l: 0 });
+        const seasonWins = Math.max(0, userTeamBeforeTier.stats.wins - prevSeasonTotals.w);
+        const seasonLosses = Math.max(0, userTeamBeforeTier.stats.losses - prevSeasonTotals.l);
+
+        // Foi campeão de algum torneio do PRÓPRIO tier nesta temporada?
+        const wonTierTitle = champions.some(
+          c => c.isUserChampion && resolvedTournaments[c.tournamentId]?.tier === userTeamBeforeTier.tier
+        );
+        // Desempenho forte: título do tier OU saldo de vitórias sólido com maioria de vitórias.
+        const strongSeason = wonTierTitle || (seasonWins >= 6 && seasonWins > seasonLosses);
+        // Desempenho fraco: sem título e com muitas derrotas dominando o saldo.
+        const weakSeason = !wonTierTitle && seasonLosses >= 6 && seasonLosses > seasonWins;
+
+        const currentTier = userTeamBeforeTier.tier;
+        // Menor número = melhor (tier 1 é o teto; tier 4 é o piso).
+        const promote = strongSeason && currentTier > 1;
+        const relegate = weakSeason && currentTier < 4;
+
+        if (promote || relegate) {
+          const newTier = (promote ? currentTier - 1 : currentTier + 1) as Team['tier'];
+          updatedTeams[userTeamId] = { ...userTeamBeforeTier, tier: newTier };
+          promotionNews.push({
+            id: `tier_${promote ? 'promo' : 'releg'}_${currentSeason}`,
+            title: promote
+              ? `${userTeamBeforeTier.name} é PROMOVIDO para o Tier ${newTier}!`
+              : `${userTeamBeforeTier.name} é REBAIXADO para o Tier ${newTier}.`,
+            content: promote
+              ? `Após uma campanha de destaque (${seasonWins} vitórias${wonTierTitle ? ' e título do seu tier' : ''}) na Temporada ${currentSeason}, o ${userTeamBeforeTier.name} subiu de divisão e agora disputa o Tier ${newTier}. Adversários mais fortes e premiações maiores aguardam na Temporada ${nextSeason}.`
+              : `A Temporada ${currentSeason} foi dura para o ${userTeamBeforeTier.name} (${seasonLosses} derrotas e sem título). O time foi rebaixado para o Tier ${newTier} e terá a chance de se reerguer na Temporada ${nextSeason}.`,
+            category: 'general',
+            week: currentWeek,
+            dateStr: `Semana ${currentWeek}`,
+          });
+        }
+      }
+
       // 2. ENVELHECIMENTO + APOSENTADORIA + EVOLUÇÃO DE POTENCIAL.
       // Jovens (<=22) evoluem mais forte rumo ao potencial; veteranos podem se aposentar.
       Object.values(updatedPlayers).forEach(prev => {
@@ -745,6 +825,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           isFinished: false,
           currentRound: 0,
           weekScheduled: baseline ? baseline.weekScheduled : t.weekScheduled,
+          // Recompõe os participantes com o tier ATUALIZADO do usuário (pós-promoção/rebaixamento),
+          // garantindo a vaga dele nos torneios do novo tier para a próxima temporada.
+          teamIds: computeTournamentTeamIds(t, updatedTeams, userTeamId),
         };
       });
 
@@ -807,7 +890,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         players: updatedPlayers,
         tournaments: resetTournaments,
         financialHistory: newFinEntry,
-        historyNews: [seasonEndNews, ...aiInterestNews, ...newsAfterWeek],
+        historyNews: [...promotionNews, seasonEndNews, ...aiInterestNews, ...newsAfterWeek],
         seasonSummary,
         historicoTemporadas: updatedHistorico,
         currentScreen: 'seasonSummary',
@@ -828,6 +911,20 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // Auto-save no avanço
     get().salvarJogo();
+  },
+
+  // Fast-forward: avança semana a semana até que `avancarSemana` abra uma tela imersiva
+  // (matchPreview de torneio ou seasonSummary na virada de temporada). Reaproveita 100% da
+  // lógica de `avancarSemana` (economia, treino, virada) — apenas a invoca em sequência.
+  // O cap de segurança (uma temporada inteira) impede laço infinito caso o usuário não tenha
+  // mais torneios agendados no ano.
+  avancarAtePartida: () => {
+    const MAX_AVANCOS = 48; // teto de uma temporada — evita laço infinito
+    for (let i = 0; i < MAX_AVANCOS; i++) {
+      get().avancarSemana();
+      // Se uma tela imersiva foi aberta (partida pronta ou fim de temporada), para o fast-forward.
+      if (get().currentScreen !== 'dashboard') return;
+    }
   },
 
   definirTitular: (playerId, status) => {
@@ -1477,6 +1574,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().salvarJogo();
   },
 
+  // Define/limpa o emblema (logoUrl) de um time. String vazia => remove o logo (volta ao
+  // emblema procedural). Atualização IMUTÁVEL: copia o map e o time alterado.
+  editarTimeLogo: (teamId, logoUrl) => {
+    const { teams } = get();
+    const existing = teams[teamId];
+    if (!existing) return;
+    const trimmed = logoUrl.trim();
+    set({
+      teams: {
+        ...teams,
+        [teamId]: { ...existing, logoUrl: trimmed.length > 0 ? trimmed : undefined },
+      },
+    });
+    get().salvarJogo();
+  },
+
   setScreen: (screen) => set({ currentScreen: screen }),
   setSelectedPlayerId: (id) => set({ selectedPlayerId: id }),
 
@@ -1553,33 +1666,29 @@ export const useGameStore = create<GameState>((set, get) => ({
     const isUserWinner = activeMatch.winnerId === userTeamId;
 
     const updatedTeams = { ...teams };
+    // Acumula entradas do extrato e aplica TUDO num único set() no fim (evita "torn state"
+    // com múltiplos set intermediários lendo get().financialHistory em sequência).
+    const finEntries: { week: number; description: string; amount: number }[] = [];
     if (isUserWinner) {
       // Premiação base por vitória + bônus do patrocinador (entradas separadas no extrato)
       const basePrize = 5000;
       const activeSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
-      const winBonus = activeSponsor ? activeSponsor.winBonus : 0;
+      const winBonus = activeSponsor?.winBonus ?? 0; // ?? 0 evita NaN no budget em saves antigos
 
-      // Cópia imutável do time do usuário (inclusive stats aninhado)
+      // Cópia imutável do time do usuário (inclusive stats aninhado). Vitória soma
+      // +2 de reputação (teto 100): é o motor de progressão que destrava promoção de tier.
       updatedTeams[userTeamId] = {
         ...userTeam,
         points: userTeam.points + 50, // bônus de ranking
         budget: userTeam.budget + basePrize + winBonus,
+        reputation: Math.min(100, userTeam.reputation + 2),
         stats: { ...userTeam.stats, wins: userTeam.stats.wins + 1 },
       };
 
-      const winEntries = [
-        { week: currentWeek, description: 'Premiação por Vitória', amount: basePrize },
-      ];
+      finEntries.push({ week: currentWeek, description: 'Premiação por Vitória', amount: basePrize });
       if (activeSponsor && winBonus > 0) {
-        winEntries.push({ week: currentWeek, description: `Bônus de Vitória: ${activeSponsor.name}`, amount: winBonus });
+        finEntries.push({ week: currentWeek, description: `Bônus de Vitória: ${activeSponsor.name}`, amount: winBonus });
       }
-
-      set({
-        financialHistory: [
-          ...get().financialHistory,
-          ...winEntries,
-        ]
-      });
     } else {
       updatedTeams[userTeamId] = {
         ...userTeam,
@@ -1609,6 +1718,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tourney.teamIds.length))));
       const updatedT: Tournament = { ...tourney };
       if (isUserWinner) {
+        // PRÊMIO POR RODADA: cada vitória no bracket paga uma fatia da premiação, escalando
+        // com o avanço (rodadas finais valem mais). Mantém o caixa saudável ao longo do
+        // torneio, não só no título. ~6% do prizePool na 1ª rodada, dobrando a cada fase.
+        const roundIndex = tourney.currentRound; // 0-based: rodada que acabou de ser vencida
+        // Fração LINEAR e CAPADA da premiação (5% por rodada, teto 20%) — nunca explode além
+        // do prizePool (a fórmula exponencial 1.8^round inflava o caixa). O título paga o resto.
+        const roundPrize = Math.round(tourney.prizePool * Math.min(0.20, 0.05 * (roundIndex + 1)));
+        if (roundPrize > 0) {
+          const teamBeforeRoundPrize = updatedTeams[userTeamId];
+          updatedTeams[userTeamId] = {
+            ...teamBeforeRoundPrize,
+            budget: teamBeforeRoundPrize.budget + roundPrize,
+          };
+          finEntries.push({ week: currentWeek, description: `Premiação de rodada: ${tourney.name}`, amount: roundPrize });
+        }
+
         updatedT.currentRound = tourney.currentRound + 1;
         if (updatedT.currentRound >= totalRounds) {
           // CAMPEÃO: encerra o torneio, paga a premiação e contabiliza o título
@@ -1617,30 +1742,24 @@ export const useGameStore = create<GameState>((set, get) => ({
 
           // Bônus de título do patrocinador, quando houver contrato ativo
           const titleSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
-          const titleBonus = titleSponsor && titleSponsor.titleBonus > 0 ? titleSponsor.titleBonus : 0;
+          const titleBonus = titleSponsor?.titleBonus ?? 0; // ?? 0 evita NaN em saves antigos
 
-          // Cópia imutável a partir do estado já atualizado pela vitória (stats aninhado incluso)
+          // Cópia imutável a partir do estado já atualizado pela vitória (stats aninhado incluso).
+          // Título soma +8 de reputação (teto 100), além do +2 já creditado pela vitória — salto
+          // de reputação que costuma destravar a promoção de tier na virada de temporada.
           const champTeam = updatedTeams[userTeamId];
           updatedTeams[userTeamId] = {
             ...champTeam,
             budget: champTeam.budget + tourney.prizePool + titleBonus,
             points: champTeam.points + 150,
+            reputation: Math.min(100, champTeam.reputation + 8),
             stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
           };
 
-          const titleEntries = [
-            { week: currentWeek, description: `Premiação: Campeão do ${tourney.name}`, amount: tourney.prizePool },
-          ];
+          finEntries.push({ week: currentWeek, description: `Premiação: Campeão do ${tourney.name}`, amount: tourney.prizePool });
           if (titleSponsor && titleBonus > 0) {
-            titleEntries.push({ week: currentWeek, description: `Bônus de Título: ${titleSponsor.name}`, amount: titleBonus });
+            finEntries.push({ week: currentWeek, description: `Bônus de Título: ${titleSponsor.name}`, amount: titleBonus });
           }
-
-          set({
-            financialHistory: [
-              ...get().financialHistory,
-              ...titleEntries,
-            ]
-          });
           championNews = {
             id: `champ_${tourney.id}_${currentWeek}`,
             title: `${userTeam.name} é CAMPEÃO do ${tourney.name}!`,
@@ -1675,6 +1794,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       activeMatch: null,
       isSimulatingMatch: false,
       currentScreen: 'matchResult',
+      financialHistory: [...get().financialHistory, ...finEntries],
       historyNews: championNews ? [championNews, news, ...get().historyNews] : [news, ...get().historyNews]
     });
 

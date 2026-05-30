@@ -118,9 +118,12 @@ export const Home: React.FC = () => {
       </div>
 
       {/* RODA PÉ */}
-      <div className="text-center z-10">
+      <div className="text-center z-10 space-y-1.5">
         <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">
           Desenvolvido para Estudo, Protótipo & Diversão Pessoal. 2026.
+        </p>
+        <p className="text-[10px] font-medium text-slate-600 tracking-wide">
+          Projeto fan-made não-oficial, sem afiliação. Marcas e nomes pertencem a seus donos.
         </p>
       </div>
     </div>

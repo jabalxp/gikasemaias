@@ -3,6 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { realMaps } from '../game/data/realMaps';
 import { Trophy, Award, ArrowRight } from 'lucide-react';
 import { Player } from '../types';
+import { TeamCrest } from '../components/ui/TeamCrest';
 
 /**
  * Tela de PÓS-JOGO (spec §25.3): placar final, MVP e estatísticas por jogador.
@@ -63,14 +64,20 @@ export const MatchResult: React.FC = () => {
         <span className={`text-xs font-black uppercase tracking-[0.3em] ${userWon ? 'text-brand-success' : 'text-brand-danger'}`}>
           {userWon ? 'Vitória' : 'Derrota'}
         </span>
-        <div className="flex items-center justify-center gap-8 mt-3">
-          <span className="text-lg font-black text-white w-28 text-right">{teamA.name}</span>
+        <div className="flex items-center justify-center gap-6 mt-3">
+          <div className="flex items-center gap-3 w-40 justify-end">
+            <span className="text-lg font-black text-white text-right truncate">{teamA.name}</span>
+            <TeamCrest team={teamA} size={44} />
+          </div>
           <div className="flex items-center gap-4">
             <span className="text-5xl font-black text-neon-cyan">{finishedMatch.scoreA}</span>
             <span className="text-slate-600 font-bold">X</span>
             <span className="text-5xl font-black text-neon-purple">{finishedMatch.scoreB}</span>
           </div>
-          <span className="text-lg font-black text-white w-28 text-left">{teamB.name}</span>
+          <div className="flex items-center gap-3 w-40 justify-start">
+            <TeamCrest team={teamB} size={44} />
+            <span className="text-lg font-black text-white text-left truncate">{teamB.name}</span>
+          </div>
         </div>
         <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-wider mt-3">Mapa: {mapName}</p>
       </div>

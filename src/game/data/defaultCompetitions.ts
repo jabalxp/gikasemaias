@@ -3,7 +3,7 @@ import { Tournament } from '../../types';
 export const defaultCompetitions: Tournament[] = [
   {
     id: 'major_mundial',
-    name: 'Major Mundial ProStrike',
+    name: 'PGL Major',
     tier: 1,
     prizePool: 1000000,
     teamIds: [], // Preenchido dinamicamente com base nos rankings
@@ -15,7 +15,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'superliga_global',
-    name: 'Superliga Global Elite',
+    name: 'BLAST Premier World Final',
     tier: 1,
     prizePool: 500000,
     teamIds: [],
@@ -27,7 +27,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'champions_fps',
-    name: 'Champions FPS Cup',
+    name: 'IEM Cologne',
     tier: 1,
     prizePool: 250000,
     teamIds: [],
@@ -39,7 +39,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'pro_league_regional',
-    name: 'Pro League Regional SA/NA',
+    name: 'ESL Pro League',
     tier: 2,
     prizePool: 120000,
     teamIds: [],
@@ -51,7 +51,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'masters_challenger',
-    name: 'Masters Challenger Europe/Americas',
+    name: 'IEM Dallas',
     tier: 2,
     prizePool: 80000,
     teamIds: [],
@@ -63,7 +63,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'circuito_sa',
-    name: 'Circuito Sul-Americano',
+    name: 'ESL Challenger League SA',
     tier: 3,
     prizePool: 40000,
     teamIds: [],
@@ -75,7 +75,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'copa_semipro',
-    name: 'Copa Semi-Pro Latam',
+    name: 'CCT South America',
     tier: 3,
     prizePool: 20000,
     teamIds: [],
@@ -87,7 +87,7 @@ export const defaultCompetitions: Tournament[] = [
   },
   {
     id: 'liga_amadora',
-    name: 'Liga Amadora Regional',
+    name: 'Gamers Club Master',
     tier: 4,
     prizePool: 5000,
     teamIds: [],

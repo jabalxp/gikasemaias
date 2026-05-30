@@ -3,6 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { realMaps } from '../game/data/realMaps';
 import { Play, FastForward, Swords } from 'lucide-react';
 import { Player } from '../types';
+import { TeamCrest } from '../components/ui/TeamCrest';
 
 /**
  * Tela de PRÉ-JOGO (spec §25.1): mostra o confronto, odds e mapa, e deixa o usuário
@@ -33,12 +34,7 @@ export const MatchPreview: React.FC = () => {
     const t = teams[teamId];
     return (
       <div className="flex flex-col items-center gap-2">
-        <div
-          className="w-20 h-20 rounded-2xl flex items-center justify-center font-black text-xl border"
-          style={{ backgroundColor: t.colorPrimary, borderColor: t.colorSecondary, color: t.colorPrimary === '#ffffff' ? '#000' : '#fff' }}
-        >
-          {t.tag}
-        </div>
+        <TeamCrest team={t} size={80} shape="rounded" />
         <p className="text-sm font-black text-white">{t.name}</p>
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
           {t.region} • Rank #{t.points}
