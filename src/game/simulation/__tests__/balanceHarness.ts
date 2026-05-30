@@ -34,6 +34,52 @@ const makePlayer = (teamId: string, overall: number, i: number, role: Player['ro
 const makeSquad = (teamId: string, overall: number): Player[] =>
   [0, 1, 2, 3, 4].map((i) => makePlayer(teamId, overall, i, i === 0 ? 'AWPer' : i === 1 ? 'IGL' : 'Rifler'));
 
+// ROLES-05: linha bem distribuída por funções (Entry/AWPer/IGL/Support/Clutcher).
+const ROLES_DISTRIBUIDAS: readonly Player['role'][] = ['Entry Fragger', 'AWPer', 'IGL', 'Support', 'Clutcher'];
+const makeSquadRoles = (teamId: string, overall: number): Player[] =>
+  [0, 1, 2, 3, 4].map((i) => makePlayer(teamId, overall, i, ROLES_DISTRIBUIDAS[i]));
+
+// ROLES-05: linha "burra" — 5 Riflers de MESMO overall (sem composição por funções).
+const makeSquad5Riflers = (teamId: string, overall: number): Player[] =>
+  [0, 1, 2, 3, 4].map((i) => makePlayer(teamId, overall, i, 'Rifler'));
+
+// Cenário de COMPOSIÇÃO (ROLES-05): A = roles distribuídas, B = 5 Riflers, MESMO overall.
+const runComposicaoScenario = (nome: string, ovr: number, map: GameMap, N: number): ScenarioResult => {
+  const teamA = makeTeam('aaa', 1, 50, []);
+  const teamB = makeTeam('bbb', 1, 50, []);
+  let winsA = 0;
+  let ctRounds = 0;
+  let totalRounds = 0;
+  let sumRounds = 0;
+  const placares: Record<string, number> = {};
+
+  for (let n = 0; n < N; n++) {
+    const squadA = makeSquadRoles('aaa', ovr);
+    const squadB = makeSquad5Riflers('bbb', ovr);
+    const m = simulateWholeMatchQuick(teamA, teamB, squadA, squadB, map, 'test');
+    if (m.winnerId === 'aaa') winsA++;
+    const key = `${Math.max(m.scoreA, m.scoreB)}-${Math.min(m.scoreA, m.scoreB)}`;
+    placares[key] = (placares[key] || 0) + 1;
+    sumRounds += m.scoreA + m.scoreB;
+    for (const r of m.rounds) {
+      totalRounds++;
+      if (r.winningTeamSide === 'CT') ctRounds++;
+    }
+  }
+
+  const top = Object.entries(placares).sort((a, b) => b[1] - a[1]).slice(0, 4)
+    .map(([k, v]) => `${k} (${Math.round((v / N) * 100)}%)`).join(', ');
+
+  return {
+    nome,
+    winrateA: Math.round((winsA / N) * 100),
+    zebraRate: 0,
+    ctWinrate: Math.round((ctRounds / totalRounds) * 100),
+    mediaRounds: Math.round((sumRounds / N) * 10) / 10,
+    topPlacares: top,
+  };
+};
+
 const makeTeam = (id: string, tier: Team['tier'], mastery: number, recentForm: ('W' | 'L')[]): Team => ({
   id,
   name: id,
@@ -117,6 +163,7 @@ const cenarios = [
   runScenario('Tier1 vs Tier2 (85 vs 78)', 85, 78, mirage, N),
   runScenario('Tier1 vs Tier3 (85 vs 72)', 85, 72, mirage, N),
   runScenario(`CT-bias check em ${anubis.name} (85 vs 85)`, 85, 85, anubis, N),
+  runComposicaoScenario('Composição correta vs 5 Riflers (mesmo overall 85)', 85, mirage, N),
 ];
 for (const c of cenarios) {
   console.log(`• ${c.nome}`);

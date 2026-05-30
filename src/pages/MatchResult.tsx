@@ -90,7 +90,9 @@ export const MatchResult: React.FC = () => {
             <p className="text-[10px] font-black text-brand-warning uppercase tracking-widest">MVP da Partida</p>
             <p className="text-lg font-black text-white">{mvp.nickname}</p>
             <p className="text-[10px] text-slate-500 font-semibold">
-              {finishedMatch.liveStats[mvp.id]?.kills ?? 0} kills · {finishedMatch.liveStats[mvp.id]?.deaths ?? 0} deaths
+              {finishedMatch.liveStats[mvp.id]?.kills ?? 0} kills · {finishedMatch.liveStats[mvp.id]?.deaths ?? 0} deaths · {finishedMatch.liveStats[mvp.id]?.assists ?? 0} assists
+              {' · '}
+              <span className="text-brand-warning">Rating {mvp.stats.rating.toFixed(2)}</span>
             </p>
           </div>
         </div>

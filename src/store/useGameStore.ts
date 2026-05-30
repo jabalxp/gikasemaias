@@ -8,22 +8,75 @@ import { defaultCompetitions } from '../game/data/defaultCompetitions';
 import { generatePlayer, computePlayerValue } from '../game/generators/playerGenerator';
 import { generateMatchNews, generateTransferNews } from '../game/generators/newsGenerator';
 import { simulateMapVeto } from '../game/simulation/mapVetoSimulator';
-import { simulateWholeMatchQuick, simulateAiBracketChampion, computeTeamMod, BracketTeamEntry } from '../game/simulation/matchSimulator';
+import { simulateWholeMatchQuick, computeTeamMod } from '../game/simulation/matchSimulator';
+import { materializeTournament, deriveEngineFormat, defaultWinProbability, type TournamentTeam } from '../game/simulation/tournamentEngine';
+import type { TournamentMatch, TournamentStanding, TournamentEngineFormat } from '../types';
 
 // Base/Scout: custo de cada rodada de investimento na base (observação de jovens talentos).
 const INVESTIMENTO_BASE_CUSTO = 30000;
 
-// Resultado da coroação de um campeão de IA: o time premiado (cópia imutável) + a notícia.
+// Resultado da coroação de um campeão de IA: o time premiado (cópia imutável) + a notícia +
+// os jogos/tabela MATERIALIZADOS pelo motor de campeonatos (Fase 3b — CHAMP-01/02).
 interface AiChampionOutcome {
   readonly championId: string;
   readonly championTeam: Team;
   readonly news: NewsItem;
+  readonly matches: readonly TournamentMatch[];
+  readonly standings: readonly TournamentStanding[];
 }
 
 /**
+ * Força de combate de um time para o motor de campeonatos (Fase 3b): overall médio dos titulares
+ * × computeTeamMod (mapa/forma/moral/tática/IGL). Espelha o critério de `simulateAiWeeklyMatches`.
+ * Times sem titulares recebem força mínima (1) para não quebrar a probabilidade por razão.
+ */
+const computeTournamentStrength = (
+  team: Team,
+  players: Record<string, Player>,
+  map: GameMap
+): number => {
+  const starters = Object.values(players).filter((p) => p.teamId === team.id && p.status === 'titular');
+  if (starters.length === 0) return 1;
+  const avgOverall = starters.reduce((acc, p) => acc + p.overall, 0) / starters.length;
+  return Math.max(1, computeTeamMod(team, starters, map) * avgOverall);
+};
+
+/** Constrói os participantes (TournamentTeam) do motor a partir dos teamIds do torneio. */
+const buildTournamentTeams = (
+  teamIds: readonly string[],
+  teams: Record<string, Team>,
+  players: Record<string, Player>,
+  map: GameMap,
+  excludeTeamId: string | null
+): TournamentTeam[] =>
+  teamIds
+    .filter((id) => id !== excludeTeamId && teams[id])
+    .map((id, index) => ({ id, seed: index + 1, strength: computeTournamentStrength(teams[id], players, map) }));
+
+/** Nome da fase do bracket do usuário a partir de quantos times restam na rodada. */
+const userRoundName = (teamsInRound: number): string => {
+  switch (teamsInRound) {
+    case 2: return 'Final';
+    case 4: return 'Semifinal';
+    case 8: return 'Quartas de Final';
+    case 16: return 'Oitavas de Final';
+    case 32: return 'Rodada de 32';
+    default: return `Rodada de ${teamsInRound}`;
+  }
+};
+
+/** Sorteia o id de um mapa ativo (fallback: primeiro mapa). Usado para carimbar matches. */
+const makeActiveMapPicker = (): (() => string) => {
+  const active = realMaps.filter((m) => m.status === 'active');
+  const pool = active.length > 0 ? active : realMaps;
+  return () => pool[Math.floor(Math.random() * pool.length)].id;
+};
+
+/**
  * Coroa um campeão de IA para um torneio em que o usuário NÃO venceu (foi eliminado ou
- * o torneio é de fundo). Simula o bracket de eliminação entre os times de IA elegíveis,
- * premia o campeão (budget/points/stats.titles) de forma imutável e devolve a notícia.
+ * o torneio é de fundo). MATERIALIZA o torneio inteiro via tournamentEngine (jogos + tabela +
+ * campeão real), premia o campeão (budget/points/stats.titles) de forma imutável e devolve a
+ * notícia + os jogos/tabela para anexar ao Tournament (Fase 3b).
  *
  * @param tournament   Torneio a resolver.
  * @param teams        Mapa atual de times (não é mutado).
@@ -41,18 +94,14 @@ const crownAiChampion = (
   map: GameMap,
   currentWeek: number
 ): AiChampionOutcome | null => {
-  const entries: BracketTeamEntry[] = tournament.teamIds
-    .filter((id) => id !== excludeTeamId && teams[id])
-    .map((id) => ({
-      team: teams[id],
-      players: Object.values(players).filter((p) => p.teamId === id && p.status === 'titular'),
-    }));
+  const participants = buildTournamentTeams(tournament.teamIds, teams, players, map, excludeTeamId);
+  if (participants.length === 0) return null;
 
-  if (entries.length === 0) return null;
+  const engineFormat = tournament.engineFormat ?? deriveEngineFormat(tournament.id, tournament.format);
+  const materialized = materializeTournament(participants, engineFormat, makeActiveMapPicker(), defaultWinProbability);
+  if (!materialized || !teams[materialized.championId]) return null;
 
-  const championId = simulateAiBracketChampion(entries, map);
-  if (!championId || !teams[championId]) return null;
-
+  const championId = materialized.championId;
   const champTeam = teams[championId];
   const championTeam: Team = {
     ...champTeam,
@@ -72,7 +121,7 @@ const crownAiChampion = (
     dateStr: `Semana ${currentWeek}`,
   };
 
-  return { championId, championTeam, news };
+  return { championId, championTeam, news, matches: materialized.matches, standings: materialized.standings };
 };
 
 // Pontos por resultado de uma partida de fundo (amistoso/liga paralela). Valem METADE de um
@@ -287,6 +336,26 @@ export const computeTournamentTeamIds = (
     selected[selected.length - 1] = userTeamId;
   }
   return selected;
+};
+
+/**
+ * Normaliza os torneios de um save (Fase 3b — fallback p/ saves antigos): garante `matches`
+ * como array, `engineFormat` derivado quando ausente e mantém `standings`/`userOpponents`
+ * opcionais. Imutável: devolve um novo Record.
+ */
+const normalizeTournaments = (
+  tournaments: Record<string, Tournament>
+): Record<string, Tournament> => {
+  const out: Record<string, Tournament> = {};
+  Object.entries(tournaments ?? {}).forEach(([id, t]) => {
+    out[id] = {
+      ...t,
+      matches: t.matches ?? [],
+      engineFormat: t.engineFormat ?? deriveEngineFormat(t.id, t.format),
+      standings: t.standings ?? [],
+    };
+  });
+  return out;
 };
 
 // ===== NEGOCIAÇÃO DE TRANSFERÊNCIAS =====
@@ -566,6 +635,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       const copyT = JSON.parse(JSON.stringify(t)) as Tournament;
       // Preenche os participantes elegíveis pelo tier, garantindo a vaga do usuário.
       copyT.teamIds = computeTournamentTeamIds(t, teamsData, finalUserTeamId);
+      // Fase 3b: define o formato real do motor (Swiss/GSL/RR/single-elim) por id/format.
+      copyT.engineFormat = deriveEngineFormat(t.id, t.format);
       tournamentsData[t.id] = copyT;
     });
 
@@ -616,13 +687,34 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (tournamentThisWeek) {
       const opponents = tournamentThisWeek.teamIds.filter(id => id !== userTeamId && teams[id]);
       if (opponents.length > 0) {
-        const oppId = opponents[tournamentThisWeek.currentRound % opponents.length];
+        const activeMaps = realMaps.filter(m => m.status === 'active');
+        const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
+
+        // CHAMP-03: SEEDING REAL — em vez de `opponents[round % len]` (que repetia adversário),
+        // pré-computa UMA sequência de adversários DISTINTOS por rodada, ordenada por força
+        // crescente (mais fracos nas primeiras fases, o mais forte na final). Persistida em
+        // `userOpponents` no início do torneio e consumida por `currentRound`. Nunca repete.
+        let userOpponents = tournamentThisWeek.userOpponents;
+        if (!userOpponents || userOpponents.length === 0) {
+          const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tournamentThisWeek.teamIds.length))));
+          const ranked = [...opponents].sort(
+            (a, b) =>
+              computeTournamentStrength(teams[a], players, mapSelected) -
+              computeTournamentStrength(teams[b], players, mapSelected)
+          );
+          // Pega 1 adversário distinto por rodada (limitado pelo nº de adversários disponíveis).
+          userOpponents = ranked.slice(0, Math.max(1, Math.min(totalRounds, ranked.length)));
+          const updatedTournaments = { ...tournaments, [tournamentThisWeek.id]: { ...tournamentThisWeek, userOpponents } };
+          set({ tournaments: updatedTournaments });
+        }
+
+        // Adversário desta rodada: índice cravado por currentRound (sem módulo → sem repetição).
+        const round = tournamentThisWeek.currentRound;
+        const oppId = userOpponents[Math.min(round, userOpponents.length - 1)];
         const userTeam = teams[userTeamId];
         const oppTeam = teams[oppId];
         const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
         const oppSquad = Object.values(players).filter(p => p.teamId === oppId && p.status === 'titular');
-        const activeMaps = realMaps.filter(m => m.status === 'active');
-        const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
 
         // Efeito do Analista (Fase D): bônus de veto aplicado ao time do usuário (teamA).
         const analystId = userTeam.staff.analystId;
@@ -862,7 +954,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         const aiOutcome = crownAiChampion(t, updatedTeams, updatedPlayers, null, bracketMap, currentWeek);
         if (aiOutcome) {
           updatedTeams[aiOutcome.championId] = aiOutcome.championTeam;
-          resolvedTournaments[t.id] = { ...t, isFinished: true, championId: aiOutcome.championId };
+          // Anexa os jogos/tabela materializados (Fase 3b): Tournament.matches deixa de ser vazio.
+          resolvedTournaments[t.id] = {
+            ...t,
+            isFinished: true,
+            championId: aiOutcome.championId,
+            matches: [...aiOutcome.matches],
+            standings: [...aiOutcome.standings],
+          };
         }
       });
 
@@ -1008,11 +1107,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       const resetTournaments: Record<string, Tournament> = {};
       Object.values(tournaments).forEach(t => {
         const baseline = competitionDefaults[t.id];
-        const { championId: _champ, mvpPlayerId: _mvp, ...rest } = t;
+        const { championId: _champ, mvpPlayerId: _mvp, standings: _st, userOpponents: _uo, ...rest } = t;
         resetTournaments[t.id] = {
           ...rest,
           isFinished: false,
           currentRound: 0,
+          // Fase 3b: zera os artefatos da edição anterior (jogos/tabela/bracket do usuário) e
+          // garante o formato do motor para a nova temporada.
+          matches: [],
+          engineFormat: t.engineFormat ?? deriveEngineFormat(t.id, t.format),
           weekScheduled: baseline ? baseline.weekScheduled : t.weekScheduled,
           // Recompõe os participantes com o tier ATUALIZADO do usuário (pós-promoção/rebaixamento),
           // garantindo a vaga dele nos torneios do novo tier para a próxima temporada.
@@ -1959,6 +2062,25 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (tourney && !tourney.isFinished) {
       const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tourney.teamIds.length))));
       const updatedT: Tournament = { ...tourney };
+
+      // CHAMP-01/09: registra a partida JOGÁVEL do usuário como TournamentMatch (placar real,
+      // vencedor real, o mapa já sorteado), com nome de fase coerente. bestOf:1 (1 mapa jogável
+      // por enquanto — multi-mapa do usuário está fora de escopo nesta fase).
+      const teamsInThisRound = Math.pow(2, Math.max(1, totalRounds - tourney.currentRound));
+      const userMatch: TournamentMatch = {
+        matchId: `user_${tourney.id}_r${tourney.currentRound}_${currentWeek}`,
+        teamAId: activeMatch.teamAId,
+        teamBId: activeMatch.teamBId,
+        scoreA: activeMatch.scoreA,
+        scoreB: activeMatch.scoreB,
+        winnerId: activeMatch.winnerId ?? userTeamId,
+        bestOf: 1,
+        roundName: userRoundName(teamsInThisRound),
+        stage: 'Playoff',
+        mapId: activeMatch.mapId,
+      };
+      updatedT.matches = [...(tourney.matches ?? []), userMatch];
+
       if (isUserWinner) {
         // PRÊMIO POR RODADA: cada vitória no bracket paga uma fatia da premiação, escalando
         // com o avanço (rodadas finais valem mais). Mantém o caixa saudável ao longo do
@@ -2016,21 +2138,80 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       } else {
         // Eliminado do campeonato: o usuário sai, mas o torneio CONTINUA entre as IAs.
-        // Simula o bracket restante (IA vs IA) e coroa um campeão real, premiando-o.
+        // Materializa o restante do bracket (IA vs IA) e coroa um campeão real, premiando-o.
+        // Anexa os jogos/tabela da IA PRESERVANDO a partida do usuário já empurrada acima.
         updatedT.isFinished = true;
         const bracketMap = realMaps.find(m => m.id === activeMatch.mapId) ?? realMaps[0];
         const aiOutcome = crownAiChampion(updatedT, updatedTeams, get().players, userTeamId, bracketMap, currentWeek);
         if (aiOutcome) {
           updatedT.championId = aiOutcome.championId;
           updatedTeams[aiOutcome.championId] = aiOutcome.championTeam;
+          updatedT.matches = [...updatedT.matches, ...aiOutcome.matches];
+          updatedT.standings = [...aiOutcome.standings];
           championNews = aiOutcome.news;
         }
       }
       updatedTournaments[activeMatch.competitionId] = updatedT;
     }
 
+    // ACÚMULO DE STATS DE CARREIRA (FASE 1). Amistoso NÃO conta para carreira (gate via isFriendly).
+    // Itera as liveStats da partida e atualiza Player.stats de forma IMUTÁVEL (objeto + stats aninhado).
+    // Rating/ADR/KAST acumulam por MÉDIA PONDERADA pelo número de partidas jogadas (mapsPlayed).
+    const players = get().players;
+    let updatedPlayers = players;
+    if (!isFriendly) {
+      const rounds = activeMatch.scoreA + activeMatch.scoreB;
+      const mvpId = activeMatch.mvpPlayerId ?? '';
+      updatedPlayers = { ...players };
+
+      for (const [playerId, live] of Object.entries(activeMatch.liveStats)) {
+        const prev = players[playerId];
+        if (!prev) continue; // jogador pode não existir mais (raro); ignora com segurança.
+
+        const safeRounds = Math.max(1, rounds); // evita divisão por zero em saves/partidas anômalas.
+        const kpr = live.kills / safeRounds;
+        const dpr = live.deaths / safeRounds;
+        const adrMatch = live.damage / safeRounds;
+        const kast = Math.max(
+          40,
+          Math.min(100, Math.round(70 + (live.kills - live.deaths) * 2 + live.assists * 1.5))
+        );
+        const impact = 2.13 * kpr + 0.42 * (live.assists / safeRounds) - 0.41;
+        const ratingMatch = Math.max(
+          0,
+          0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adrMatch + 0.1587
+        );
+
+        const old = prev.stats;
+        const mapsOld = old.mapsPlayed;
+        const mapsNew = mapsOld + 1;
+
+        const newRating = Math.round(((old.rating * mapsOld + ratingMatch) / mapsNew) * 100) / 100;
+        const newAdr = Math.round((old.adr * mapsOld + adrMatch) / mapsNew);
+        const newKast = Math.round((old.kast * mapsOld + kast) / mapsNew);
+
+        updatedPlayers[playerId] = {
+          ...prev,
+          stats: {
+            ...old,
+            kills: old.kills + live.kills,
+            deaths: old.deaths + live.deaths,
+            assists: old.assists + live.assists,
+            firstKills: old.firstKills + live.firstKills,
+            clutchesWon: old.clutchesWon + live.clutchesWon,
+            mapsPlayed: mapsNew,
+            mvps: old.mvps + (playerId === mvpId ? 1 : 0),
+            rating: newRating,
+            adr: newAdr,
+            kast: newKast,
+          },
+        };
+      }
+    }
+
     set({
       teams: updatedTeams,
+      players: updatedPlayers,
       tournaments: updatedTournaments,
       finishedMatch: activeMatch, // Preserva a partida para a tela de resultado (MVP, stats)
       activeMatch: null,
@@ -2125,7 +2306,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         maps: saveObj.maps,
         sponsors: saveObj.sponsors,
         staffList: saveObj.staffList,
-        tournaments: saveObj.tournaments,
+        tournaments: normalizeTournaments(saveObj.tournaments),
         historyNews: saveObj.historyNews,
         financialHistory: saveObj.financialHistory,
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
@@ -2203,7 +2384,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         maps: saveObj.maps,
         sponsors: saveObj.sponsors,
         staffList: saveObj.staffList,
-        tournaments: saveObj.tournaments,
+        tournaments: normalizeTournaments(saveObj.tournaments),
         historyNews: saveObj.historyNews,
         financialHistory: saveObj.financialHistory,
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },

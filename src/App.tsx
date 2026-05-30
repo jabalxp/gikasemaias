@@ -17,6 +17,7 @@ import { Market } from './pages/Market';
 import { Friendlies } from './pages/Friendlies';
 import { Finances } from './pages/Finances';
 import { Rankings } from './pages/Rankings';
+import { Championships } from './pages/Championships';
 import { History } from './pages/History';
 import { DataEditor } from './pages/DataEditor';
 import { Saves } from './pages/Saves';
@@ -61,6 +62,8 @@ function App() {
         return <Finances />;
       case 'rankings':
         return <Rankings />;
+      case 'championships':
+        return <Championships />;
       case 'history':
         return <History />;
       case 'dataEditor':

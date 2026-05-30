@@ -128,6 +128,9 @@ export interface MatchLivePlayerStats {
   assists: number;
   damage: number;
   mvps: number;
+  firstKills: number;   // Aberturas (first blood) feitas pelo jogador na partida
+  clutchesWon: number;  // Rounds vencidos sozinho (1 vivo + ≥1 kill no round)
+  multiKills: number;   // Rounds com 3+ kills do jogador
   alive: boolean;
   hp: number;
   weapon: string;
@@ -185,8 +188,28 @@ export interface NewsItem {
 
 export interface TournamentMatch {
   matchId: string;
-  roundName: string; // Ex: "Quartas de Final", "Semifinal", "Grande Final"
+  teamAId: string;
+  teamBId: string;
+  scoreA: number;       // Placar em MAPAS (ex.: Bo3 → 2)
+  scoreB: number;       // Placar em MAPAS (ex.: Bo3 → 1)
+  winnerId: string;
+  bestOf: 1 | 3 | 5;
+  roundName: string;    // Ex: "Quartas de Final", "Semifinal", "Grande Final"
+  stage: string;        // Ex: "Single Elim", "Group A", "GSL", "Swiss R1"
+  mapId?: string;       // Mapa jogado (sorteado dos mapas ativos). Permite derivar o "mapa mais jogado".
 }
+
+/** Classificação acumulada de um time num formato com tabela (RR/GSL/Swiss). */
+export interface TournamentStanding {
+  teamId: string;
+  wins: number;
+  losses: number;
+  roundsFor: number;     // Mapas ganhos (somatório dos placares de série)
+  roundsAgainst: number; // Mapas perdidos. Saldo = roundsFor - roundsAgainst
+}
+
+/** Formato real de simulação do torneio (Fase 3b). Derivado de id/format se ausente. */
+export type TournamentEngineFormat = 'swiss' | 'gsl' | 'roundRobin' | 'singleElim';
 
 export interface Tournament {
   id: string;
@@ -201,6 +224,9 @@ export interface Tournament {
   currentRound: number;
   matches: TournamentMatch[];
   weekScheduled: number;
+  engineFormat?: TournamentEngineFormat;     // Formato do motor (Fase 3b). Fallback: derivado de id/format.
+  standings?: TournamentStanding[];          // Tabela materializada (RR/Swiss/GSL). Opcional p/ saves antigos.
+  userOpponents?: string[];                  // Sequência de adversários do usuário por rodada (sem repetição).
 }
 
 export interface SeasonChampionSnapshot {

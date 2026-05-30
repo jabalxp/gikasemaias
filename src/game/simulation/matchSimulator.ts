@@ -41,6 +41,50 @@ const randomRange = (min: number, max: number) => Math.random() * (max - min) + 
 // Escolhe um elemento aleatório
 const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
+// Probabilidade de um kill ter assistência (flash/smoke/dano combinado).
+const ASSIST_CHANCE = 0.45;
+
+/**
+ * Credita (probabilisticamente) uma assistência a um COLEGA VIVO do killer.
+ * Função pura quanto à lógica de seleção: a escolha é ponderada por `utility` (quem dá mais
+ * flash/smoke tem mais chance de assistir). Muta apenas `liveStats[colega].assists` — coerente
+ * com o padrão de mutação in-place do simulador (liveStats é o acumulador da partida).
+ */
+const maybeCreditAssist = (
+  killerId: string,
+  victimId: string,
+  killerTeamPlayers: Player[],
+  liveStats: Record<string, MatchLivePlayerStats>
+): void => {
+  if (Math.random() >= ASSIST_CHANCE) return;
+
+  const candidates = killerTeamPlayers.filter(
+    (p) => p.id !== killerId && p.id !== victimId && liveStats[p.id]?.alive
+  );
+  if (candidates.length === 0) return;
+
+  // Ponderação por utility (piso 1 para todo candidato ter alguma chance).
+  const weights = candidates.map((p) => Math.max(1, p.attributes.utility));
+  const totalWeight = weights.reduce((acc, w) => acc + w, 0);
+  let roll = Math.random() * totalWeight;
+
+  let chosen = candidates[candidates.length - 1];
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) {
+      chosen = candidates[i];
+      break;
+    }
+  }
+
+  liveStats[chosen.id].assists++;
+};
+
+// Dano base creditado ao killer por kill confirmado (alimenta o ADR).
+const creditKillDamage = (killerId: string, liveStats: Record<string, MatchLivePlayerStats>): void => {
+  liveStats[killerId].damage += Math.round(randomRange(90, 110));
+};
+
 // Pesos de balanceamento da simulação (Fase F — calibrados via balanceHarness.ts)
 const BALANCE_WEIGHTS = {
   // F0 — recalibrado para que o RNG DOMINE em gaps pequenos de skill (lutas competitivas) e só
@@ -69,6 +113,9 @@ export const initLivePlayerStats = (player: Player, startingCash: number = 800):
   assists: 0,
   damage: 0,
   mvps: 0,
+  firstKills: 0,
+  clutchesWon: 0,
+  multiKills: 0,
   alive: true,
   hp: 100,
   weapon: 'Pistola',
@@ -126,6 +173,149 @@ export const computeTeamMod = (team: Team, players: Player[], map: GameMap, anal
 const playerCondition = (p: Player): number =>
   0.90 + (p.moral / 100) * 0.07 + (p.form / 100) * 0.07 + (p.energy / 100) * 0.06;
 
+// ============================================================================
+// FASE 2 — ROLES COM PESO REAL
+// ============================================================================
+//
+// Fase do duelo, usada para ativar bônus de role específicos:
+//   'fb'        → abertura do round (first blood)
+//   'postplant' → pós-plant / retake (clutch e lurk pesam)
+//   'mid'       → trocas de defesa sem plant (mid-round)
+type ClashPhase = 'fb' | 'postplant' | 'mid';
+
+/**
+ * ROLES-01 — Bônus ADITIVO (e PEQUENO, faixa ~0..~12) ao poder de duelo, derivado de
+ * role + fase + atributos + mapa. Soma-se ao attPower/defPower ANTES de *condition *teamMod,
+ * na mesma escala dos outros termos (weaponBonus, gamesense*0.08, etc.). Função PURA.
+ *
+ * Não cria atributos novos: usa apenas aim/gamesense/clutch (os 5 existentes) e map.awpImpact.
+ * Support retorna 0 de propósito — seu valor é COLETIVO (ROLES-03, supportEdge).
+ */
+const roleClashBonus = (player: Player, phase: ClashPhase, map: GameMap, weaponName: string): number => {
+  const { aim, gamesense, clutch } = player.attributes;
+
+  switch (player.role) {
+    case 'Entry Fragger':
+      // Recompensa abrir o round: forte na abertura, neutro no resto.
+      return phase === 'fb' ? aim * 0.0025 + gamesense * 0.001 : 0;
+
+    case 'AWPer': {
+      // Vale quando está de fato com a AWP; escala pelo impacto de AWP do mapa.
+      if (weaponName === WEAPONS.awp.name) return aim * 0.006 * (map.awpImpact / 100);
+      // Sem AWP e em mapa de baixo impacto de AWP, perde um pouco na abertura.
+      return phase === 'fb' && map.awpImpact < 50 ? -4 : 0;
+    }
+
+    case 'Lurker':
+      // Protagonista do meio/pós-plant: leitura + frieza.
+      return phase === 'postplant' || phase === 'mid' ? clutch * 0.0025 + gamesense * 0.0015 : 0;
+
+    case 'Clutcher':
+      // Especialista em situações de pós-plant.
+      return phase === 'postplant' ? clutch * 0.003 : 0;
+
+    case 'IGL':
+      // Pequeno ganho de coordenação em qualquer fase (o grosso do IGL é coletivo, no teamMod).
+      return gamesense * 0.001;
+
+    case 'Star Player':
+      // Consistência acima da média em qualquer fase.
+      return aim * 0.0015;
+
+    case 'Support':
+      // Sem bônus individual — valor vem do edge coletivo (ROLES-03).
+      return 0;
+
+    case 'Rifler':
+    default:
+      return 0;
+  }
+};
+
+/**
+ * ROLES-02 — Escolha ponderada genérica. Soma os pesos e sorteia proporcionalmente.
+ * Pesos <= 0 são tratados como 0 (jamais escolhidos, a menos que todos sejam 0 → fallback uniforme).
+ */
+const weightedChoice = <T>(items: readonly T[], weightFn: (item: T) => number): T => {
+  const weights = items.map((it) => Math.max(0, weightFn(it)));
+  const total = weights.reduce((acc, w) => acc + w, 0);
+  if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+
+  let roll = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    roll -= weights[i];
+    if (roll <= 0) return items[i];
+  }
+  return items[items.length - 1];
+};
+
+// Peso de seleção de duelista por role+fase (ROLES-02). Faz o Entry abrir e o Lurker/Clutcher
+// protagonizar o pós-plant, sem nunca zerar a chance de qualquer um (piso 0.5/0.8).
+const duelistWeight = (player: Player, phase: ClashPhase, map: GameMap): number => {
+  switch (phase) {
+    case 'fb':
+      switch (player.role) {
+        case 'Entry Fragger': return 3.0;
+        case 'Star Player': return 2.0;
+        case 'AWPer': return map.awpImpact > 70 ? 1.0 : 0.9;
+        case 'Rifler': return 1.0;
+        case 'Lurker': return 1.0;
+        case 'Support':
+        case 'IGL': return 0.5;
+        default: return 1.0;
+      }
+    case 'postplant':
+      switch (player.role) {
+        case 'Lurker': return 2.5;
+        case 'Clutcher': return 2.5;
+        case 'Rifler': return 1.0;
+        case 'Entry Fragger': return 1.0;
+        case 'Support':
+        case 'IGL': return 0.5;
+        default: return 1.0;
+      }
+    case 'mid':
+      switch (player.role) {
+        case 'AWPer': return 1.0;
+        case 'Star Player': return 1.5;
+        case 'Rifler': return 1.0;
+        default: return 0.8;
+      }
+  }
+};
+
+// Escolhe o duelista de uma fase ponderando por role (ROLES-02).
+const pickDuelist = (players: readonly Player[], phase: ClashPhase, map: GameMap): Player =>
+  weightedChoice(players, (p) => duelistWeight(p, phase, map));
+
+// ROLES-04 — Prioridade de role no clutch (Clutcher > Lurker > resto), usada como desempate
+// no 1vX. Maior número = preferido como último homem vivo.
+const clutchRolePriority = (player: Player): number =>
+  player.role === 'Clutcher' ? 2 : player.role === 'Lurker' ? 1 : 0;
+
+// ROLES-04 — Último homem vivo: escolhe o de MAIOR clutch (com desempate por role de clutch),
+// em vez de aleatório. Modela o "ace man" segurando o 1vX.
+const pickLastManByClutch = (players: readonly Player[]): Player =>
+  players.reduce((best, p) => {
+    const score = p.attributes.clutch + clutchRolePriority(p) * 5;
+    const bestScore = best.attributes.clutch + clutchRolePriority(best) * 5;
+    return score > bestScore ? p : best;
+  }, players[0]);
+
+// ROLES-02/04 — No pós-plant, se um lado ficou em 1vX o último é o de maior clutch; caso
+// contrário, escolha ponderada por role da fase 'postplant'.
+const pickClutchOrDuelist = (players: readonly Player[], phase: ClashPhase, map: GameMap): Player =>
+  players.length === 1 ? players[0] : pickDuelist(players, phase, map);
+
+// ROLES-03 — Vantagem COLETIVA do Support: melhor utility entre os Supports do time → bônus
+// aditivo pequeno (0..0.04*100 = ~4) a QUALQUER duelista do time nas fases de execução ('fb'/'mid').
+const computeSupportEdge = (players: readonly Player[]): number => {
+  const supports = players.filter((p) => p.role === 'Support');
+  if (supports.length === 0) return 0;
+  const bestUtility = Math.max(...supports.map((p) => p.attributes.utility));
+  return (bestUtility / 100) * 0.002 * 100; // escala de poder (~0..0.2)
+};
+
 // CLASH ENGINE: Resolve um duelo entre atacante e defensor
 // Fórmula Base: Vitória = (Mira do Atacante * Peso da Arma) + Fator Posicional + Bônus de Utilitária + Clutch + RNG
 const resolveClash = (
@@ -136,7 +326,12 @@ const resolveClash = (
   attackerWeaponWeight: number,
   defenderWeaponWeight: number,
   attackerTeamMod: number,
-  defenderTeamMod: number
+  defenderTeamMod: number,
+  phase: ClashPhase,
+  attackerWeaponName: string,
+  defenderWeaponName: string,
+  attackerSupportEdge = 0,
+  defenderSupportEdge = 0
 ): { winner: 'attacker' | 'defender'; damage: number } => {
 
   const a = attacker.player;
@@ -154,17 +349,26 @@ const resolveClash = (
   const attClutchBonus = isPostPlant ? a.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
   const defClutchBonus = isPostPlant ? d.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
 
+  // ROLES-01: bônus aditivo de role+fase (pequeno, ~0..12), na mesma escala dos demais termos.
+  const attRoleBonus = roleClashBonus(a, phase, map, attackerWeaponName);
+  const defRoleBonus = roleClashBonus(d, phase, map, defenderWeaponName);
+
+  // ROLES-03: o smoke/flash do Support beneficia o TIME inteiro nas fases de execução ('fb'/'mid').
+  const isExecutionPhase = phase === 'fb' || phase === 'mid';
+  const attSupportBonus = isExecutionPhase ? attackerSupportEdge : 0;
+  const defSupportBonus = isExecutionPhase ? defenderSupportEdge : 0;
+
   // Poder: mira (posição + skill) + BÔNUS DE ARMA ADITIVO + gamesense + OVERALL (peso reduzido)
-  // + utilitárias + clutch, modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do
-  // TIME, com RNG ~normal. A arma soma um bônus fixo (não multiplica a mira) — ver weaponBonus.
+  // + utilitárias + clutch + BÔNUS DE ROLE + EDGE DE SUPPORT, modulado pela CONDIÇÃO individual
+  // (moral/forma/energia) e pelo MOD do TIME, com RNG ~normal. Tudo aditivo antes do *condition.
   let attPower = (a.attributes.aim * attackerPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(attackerWeaponWeight)
     + (a.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (a.overall * BALANCE_WEIGHTS.overallWeight)
-    + attUtilityBonus + attClutchBonus;
+    + attUtilityBonus + attClutchBonus + attRoleBonus + attSupportBonus;
   attPower = attPower * playerCondition(a) * attackerTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
   let defPower = (d.attributes.aim * defenderPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(defenderWeaponWeight)
     + (d.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (d.overall * BALANCE_WEIGHTS.overallWeight)
-    + defUtilityBonus + defClutchBonus;
+    + defUtilityBonus + defClutchBonus + defRoleBonus + defSupportBonus;
   defPower = defPower * playerCondition(d) * defenderTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
   const winner = attPower >= defPower ? 'attacker' : 'defender';
@@ -281,8 +485,23 @@ export const simulateRound = (
   const modTR = sides.teamA === 'TR' ? modA : modB;
   const modCT = sides.teamA === 'CT' ? modA : modB;
 
-  // Equipar C4 no TR de maior Utility/Gamesense
-  const carrier = randomChoice(playersTR);
+  // ROLES-03: edge coletivo do Support de cada lado (smoke/flash que beneficia o time inteiro).
+  const supportEdgeTR = computeSupportEdge(playersTR);
+  const supportEdgeCT = computeSupportEdge(playersCT);
+
+  // Peso E nome da arma de um jogador conforme seu lado, role e o buy do round (ROLES-01 precisa
+  // do nome para saber se o AWPer está de fato com AWP). AWPer só pega AWP em buy/em mapas relevantes.
+  const weaponOf = (p: Player, side: 'CT' | 'TR', requireHighAwpMap: boolean): { weight: number; name: string } => {
+    const buyType = side === 'TR' ? buyTypeTR(p) : buyTypeCT(p);
+    const awpEligible = p.role === 'AWPer' && (!requireHighAwpMap || map.awpImpact > 70);
+    if (awpEligible) return { weight: WEAPONS.awp.weight, name: WEAPONS.awp.name };
+    if (buyType === 'buy') return { weight: WEAPONS.buy.weight, name: WEAPONS.buy.name };
+    return { weight: WEAPONS.eco.weight, name: WEAPONS.eco.name };
+  };
+
+  // ROLES-05 (opcional): a C4 vai para o TR de MENOR peso de entry (Support/IGL preferidos),
+  // liberando os fraggers para abrir o round em vez de carregar a bomba.
+  const carrier = weightedChoice(playersTR, (p) => 1 / Math.max(0.5, duelistWeight(p, 'fb', map)));
   liveStats[carrier.id].hasC4 = true;
 
   // 2. EVENTOS INICIAIS (First Blood / Controle de Mapa)
@@ -296,11 +515,12 @@ export const simulateRound = (
   let firstBloodOccurred = false;
   let timeStr = '1:30';
 
-  const trFB = randomChoice(playersTR);
-  const ctFB = randomChoice(playersCT);
+  // ROLES-02: o abridor é ponderado por role (Entry/Star/AWP em mapa de AWP têm prioridade).
+  const trFB = pickDuelist(playersTR, 'fb', map);
+  const ctFB = pickDuelist(playersCT, 'fb', map);
 
-  const trWWeight = trFB.role === 'AWPer' && map.awpImpact > 70 ? WEAPONS.awp.weight : (buyTypeTR(trFB) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
-  const ctWWeight = ctFB.role === 'AWPer' && map.awpImpact > 70 ? WEAPONS.awp.weight : (buyTypeCT(ctFB) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
+  const trFBWeapon = weaponOf(trFB, 'TR', true);
+  const ctFBWeapon = weaponOf(ctFB, 'CT', true);
 
   function buyTypeTR(p: Player) { return sides.teamA === 'TR' ? buyTypeA : buyTypeB; }
   function buyTypeCT(p: Player) { return sides.teamA === 'CT' ? buyTypeA : buyTypeB; }
@@ -310,10 +530,15 @@ export const simulateRound = (
     { player: ctFB, stats: liveStats[ctFB.id], side: 'CT' },
     false,
     map,
-    trWWeight,
-    ctWWeight,
+    trFBWeapon.weight,
+    ctFBWeapon.weight,
     modTR,
-    modCT
+    modCT,
+    'fb',
+    trFBWeapon.name,
+    ctFBWeapon.name,
+    supportEdgeTR,
+    supportEdgeCT
   );
 
   if (fbDuelo.winner === 'attacker') {
@@ -322,6 +547,9 @@ export const simulateRound = (
     liveStats[ctFB.id].hp = 0;
     liveStats[trFB.id].kills++;
     liveStats[ctFB.id].deaths++;
+    liveStats[trFB.id].firstKills++;
+    creditKillDamage(trFB.id, liveStats);
+    maybeCreditAssist(trFB.id, ctFB.id, playersTR, liveStats);
     events.push({
       time: timeStr,
       description: `[TR] ${trFB.nickname} obteve a PRIMEIRA ELIMINAÇÃO em cima de [CT] ${ctFB.nickname} usando ${liveStats[trFB.id].weapon}.`,
@@ -336,6 +564,9 @@ export const simulateRound = (
     liveStats[trFB.id].hp = 0;
     liveStats[ctFB.id].kills++;
     liveStats[trFB.id].deaths++;
+    liveStats[ctFB.id].firstKills++;
+    creditKillDamage(ctFB.id, liveStats);
+    maybeCreditAssist(ctFB.id, trFB.id, playersCT, liveStats);
     events.push({
       time: timeStr,
       description: `[CT] ${ctFB.nickname} garantiu a PRIMEIRA ELIMINAÇÃO derrubando [TR] ${trFB.nickname} com ${liveStats[ctFB.id].weapon}.`,
@@ -364,7 +595,8 @@ export const simulateRound = (
   const plantBase = 24;
   const survivalRatio = (aliveTRCount / (aliveTRCount + aliveCTCount + 0.001)) * 50;
   const utilityEdge = (avgTRUtility - avgCTUtility) * 0.2;
-  const plantChance = Math.min(75, Math.max(5, plantBase + survivalRatio + utilityEdge));
+  // ROLES-03: o Support do TR também facilita a tomada do site (pequeno empurrão na plantChance).
+  const plantChance = Math.min(75, Math.max(5, plantBase + survivalRatio + utilityEdge + supportEdgeTR));
   const isC4Planted = Math.random() * 100 < plantChance && aliveTRCount > 0;
 
   let roundWinnerId = '';
@@ -386,22 +618,28 @@ export const simulateRound = (
 
       if (trAlive.length === 0 || ctAlive.length === 0) break;
 
-      const pTR = randomChoice(trAlive);
-      const pCT = randomChoice(ctAlive);
+      // ROLES-02/04: pós-plant prioriza Lurker/Clutcher; no 1vX o último é o de maior clutch.
+      const pTR = pickClutchOrDuelist(trAlive, 'postplant', map);
+      const pCT = pickClutchOrDuelist(ctAlive, 'postplant', map);
 
       // Duelo focado em Clutch e Utilitárias no retake
-      const dWeightTR = pTR.role === 'AWPer' ? WEAPONS.awp.weight : (buyTypeTR(pTR) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
-      const dWeightCT = pCT.role === 'AWPer' ? WEAPONS.awp.weight : (buyTypeCT(pCT) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
+      const wTR = weaponOf(pTR, 'TR', false);
+      const wCT = weaponOf(pCT, 'CT', false);
 
       const duelo = resolveClash(
         { player: pTR, stats: liveStats[pTR.id], side: 'TR' },
         { player: pCT, stats: liveStats[pCT.id], side: 'CT' },
         true,
         map,
-        dWeightTR,
-        dWeightCT,
+        wTR.weight,
+        wCT.weight,
         modTR,
-        modCT
+        modCT,
+        'postplant',
+        wTR.name,
+        wCT.name,
+        supportEdgeTR,
+        supportEdgeCT
       );
 
       if (duelo.winner === 'attacker') {
@@ -410,6 +648,8 @@ export const simulateRound = (
         liveStats[pCT.id].hp = 0;
         liveStats[pTR.id].kills++;
         liveStats[pCT.id].deaths++;
+        creditKillDamage(pTR.id, liveStats);
+        maybeCreditAssist(pTR.id, pCT.id, playersTR, liveStats);
         events.push({
           time: '0:30',
           description: `[TR] ${pTR.nickname} segurou o avanço e eliminou [CT] ${pCT.nickname} (${liveStats[pTR.id].weapon}).`,
@@ -424,6 +664,8 @@ export const simulateRound = (
         liveStats[pTR.id].hp = 0;
         liveStats[pCT.id].kills++;
         liveStats[pTR.id].deaths++;
+        creditKillDamage(pCT.id, liveStats);
+        maybeCreditAssist(pCT.id, pTR.id, playersCT, liveStats);
         events.push({
           time: '0:25',
           description: `[CT] ${pCT.nickname} ganhou o espaço e abateu [TR] ${pTR.nickname} com maestria.`,
@@ -485,21 +727,31 @@ export const simulateRound = (
 
       if (trAlive.length === 0 || ctAlive.length === 0) break;
 
-      const pTR = randomChoice(trAlive);
-      const pCT = randomChoice(ctAlive);
+      // ROLES-02/04: defesa sem plant é 'mid' (AWPer/Star pesam); 1vX prioriza maior clutch
+      // e usa 'postplant' para ativar o bônus de clutch do último homem.
+      const trIs1vX = trAlive.length === 1;
+      const ctIs1vX = ctAlive.length === 1;
+      const pTR = trIs1vX ? pickLastManByClutch(trAlive) : pickDuelist(trAlive, 'mid', map);
+      const pCT = ctIs1vX ? pickLastManByClutch(ctAlive) : pickDuelist(ctAlive, 'mid', map);
+      const defPhase: ClashPhase = trIs1vX || ctIs1vX ? 'postplant' : 'mid';
 
-      const dWeightTR = pTR.role === 'AWPer' ? WEAPONS.awp.weight : (buyTypeTR(pTR) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
-      const dWeightCT = pCT.role === 'AWPer' ? WEAPONS.awp.weight : (buyTypeCT(pCT) === 'buy' ? WEAPONS.buy.weight : WEAPONS.eco.weight);
+      const wTR = weaponOf(pTR, 'TR', false);
+      const wCT = weaponOf(pCT, 'CT', false);
 
       const duelo = resolveClash(
         { player: pTR, stats: liveStats[pTR.id], side: 'TR' },
         { player: pCT, stats: liveStats[pCT.id], side: 'CT' },
         false,
         map,
-        dWeightTR,
-        dWeightCT,
+        wTR.weight,
+        wCT.weight,
         modTR,
-        modCT
+        modCT,
+        defPhase,
+        wTR.name,
+        wCT.name,
+        supportEdgeTR,
+        supportEdgeCT
       );
 
       if (duelo.winner === 'attacker') {
@@ -507,6 +759,8 @@ export const simulateRound = (
         liveStats[pCT.id].hp = 0;
         liveStats[pTR.id].kills++;
         liveStats[pCT.id].deaths++;
+        creditKillDamage(pTR.id, liveStats);
+        maybeCreditAssist(pTR.id, pCT.id, playersTR, liveStats);
         events.push({
           time: '0:20',
           description: `[TR] ${pTR.nickname} venceu o duelo direto e eliminou [CT] ${pCT.nickname}.`,
@@ -520,6 +774,8 @@ export const simulateRound = (
         liveStats[pTR.id].hp = 0;
         liveStats[pCT.id].kills++;
         liveStats[pTR.id].deaths++;
+        creditKillDamage(pCT.id, liveStats);
+        maybeCreditAssist(pCT.id, pTR.id, playersCT, liveStats);
         events.push({
           time: '0:18',
           description: `[CT] ${pCT.nickname} segurou a entrada eliminando [TR] ${pTR.nickname}.`,
@@ -563,19 +819,33 @@ export const simulateRound = (
     }
   }
 
-  // Identificar MVP do Round (Quem fez mais kills no round, ou clutch decisivo)
-  let roundMvpId = '';
-  let highestKills = -1;
+  // Kills feitos por jogador NESTE round (diferença contra o snapshot do início do round).
+  const killsInRoundOf = (id: string): number =>
+    Math.max(0, liveStats[id].kills - (killsBeforeRound[id] ?? liveStats[id].kills));
+
+  // MULTI-KILLS: jogador que fez 3+ kills no round.
   allLivePlayers.forEach(p => {
-    // Como a contagem é cumulativa, vamos verificar quem causou mais impacto
-    // Simplificando: o jogador vivo do time vencedor com melhor mira/clutch
-    const stats = liveStats[p.id];
-    if (p.teamId === roundWinnerId && stats.alive) {
-      const impact = p.attributes.aim + p.attributes.clutch;
-      if (impact > highestKills) {
-        highestKills = impact;
-        roundMvpId = p.id;
-      }
+    if (killsInRoundOf(p.id) >= 3) liveStats[p.id].multiKills++;
+  });
+
+  // CLUTCH: o time VENCEDOR terminou com EXATAMENTE 1 vivo e esse jogador fez ≥1 kill no round.
+  const winnerSurvivors = allLivePlayers.filter(p => p.teamId === roundWinnerId && liveStats[p.id].alive);
+  let clutchHeroId = '';
+  if (winnerSurvivors.length === 1 && killsInRoundOf(winnerSurvivors[0].id) >= 1) {
+    clutchHeroId = winnerSurvivors[0].id;
+    liveStats[clutchHeroId].clutchesWon++;
+  }
+
+  // Identificar MVP do Round: maior número de kills NO round dentre o time vencedor,
+  // com bônus se foi um clutch decisivo. Substitui o critério estático (aim+clutch).
+  let roundMvpId = '';
+  let bestRoundImpact = -1;
+  allLivePlayers.forEach(p => {
+    if (p.teamId !== roundWinnerId) return;
+    const impact = killsInRoundOf(p.id) + (p.id === clutchHeroId ? 2 : 0);
+    if (impact > bestRoundImpact) {
+      bestRoundImpact = impact;
+      roundMvpId = p.id;
     }
   });
   if (!roundMvpId) {
@@ -768,14 +1038,23 @@ export const simulateWholeMatchQuick = (
     currentRound++;
   }
 
-  // Eleger MVP Geral do Confronto. Favorece o time VENCEDOR (bônus de impacto): um carry
-  // do time perdedor só leva o MVP se tiver kills bem superiores.
+  // Eleger MVP Geral do Confronto por impactScore ponderado (kills + assists + clutches +
+  // multi-kills + aberturas - mortes), com bônus multiplicativo para o time VENCEDOR. Um carry
+  // do time perdedor só leva o MVP se o impacto bruto for bem superior.
   const matchWinnerId = scoreA > scoreB ? teamA.id : teamB.id;
   let mvpPlayerId = '';
-  let highestScore = -1;
+  let highestScore = -Infinity;
   const allPlayers = [...activePlayersA, ...activePlayersB];
   allPlayers.forEach(p => {
-    const score = liveStats[p.id].kills + (p.teamId === matchWinnerId ? 6 : 0);
+    const s = liveStats[p.id];
+    const baseImpact =
+      s.kills * 1.0 +
+      s.assists * 0.4 +
+      s.clutchesWon * 2.0 +
+      s.multiKills * 1.5 +
+      s.firstKills * 0.5 -
+      s.deaths * 0.3;
+    const score = baseImpact * (p.teamId === matchWinnerId ? 1.15 : 1.0);
     if (score > highestScore) {
       highestScore = score;
       mvpPlayerId = p.id;

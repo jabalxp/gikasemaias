@@ -17,7 +17,8 @@ import {
   GraduationCap,
   History,
   CalendarDays,
-  Swords
+  Swords,
+  Trophy
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -32,6 +33,7 @@ export const Sidebar: React.FC = () => {
     { id: 'tactics', label: 'Táticas & Vetos', icon: Sliders },
     { id: 'training', label: 'Treino Semanal', icon: Dumbbell },
     { id: 'calendar', label: 'Calendário', icon: CalendarDays },
+    { id: 'championships', label: 'Campeonatos', icon: Trophy },
     { id: 'friendlies', label: 'Amistosos', icon: Swords },
     { id: 'staff', label: 'Comissão Técnica', icon: UserCog },
     { id: 'academy', label: 'Academia Base', icon: GraduationCap },
