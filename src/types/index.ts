@@ -1,0 +1,226 @@
+export interface PlayerAttributes {
+  aim: number;        // Mira
+  gamesense: number;  // Noção de Jogo
+  clutch: number;     // Calma / Clutch
+  utility: number;    // Utilitárias
+  igl: number;        // Liderança / IGL
+}
+
+export interface PlayerStats {
+  rating: number;
+  kills: number;
+  deaths: number;
+  assists: number;
+  adr: number;       // Average Damage per Round
+  kast: number;      // % of rounds with Kill, Assist, Survival or Trade
+  hsPercentage: number;
+  clutchesWon: number;
+  firstKills: number;
+  firstDeaths: number;
+  mapsPlayed: number;
+  mvps: number;
+}
+
+export interface Player {
+  id: string;
+  nickname: string;
+  name: string;
+  nationality: string;
+  age: number;
+  teamId: string; // ID do time ou "free_agents"
+  role: 'AWPer' | 'Rifler' | 'Entry Fragger' | 'Lurker' | 'Support' | 'IGL' | 'Clutcher' | 'Star Player';
+  subRoles: string[];
+  overall: number;
+  potential: number;
+  value: number;            // Valor de passe/mercado ($)
+  salary: number;           // Salário semanal ($)
+  contractMonths: number;   // Duração restante do contrato em meses
+  moral: number;            // 0 - 100
+  form: number;             // Forma física (0 - 100)
+  energy: number;           // Stamina restante (0 - 100)
+  personality: 'Calmo' | 'Explosivo' | 'Líder' | 'Focado' | 'Inconsistente' | 'Estrela';
+  attributes: PlayerAttributes;
+  stats: PlayerStats;
+  status: 'titular' | 'reserva' | 'free_agent' | 'aposentado' | 'coach';
+}
+
+export interface TeamTactics {
+  playstyle: 'very_aggressive' | 'aggressive' | 'balanced' | 'defensive' | 'very_defensive';
+  tempo: 'slow' | 'normal' | 'fast' | 'explosive';
+  focus: 'map_control' | 'execute' | 'pickoffs' | 'retake' | 'default' | 'mid_control';
+  utilityUsage: 'low' | 'medium' | 'high' | 'very_high';
+  economyStyle: 'eco' | 'balanced' | 'force' | 'aggressive';
+}
+
+export interface TeamStats {
+  wins: number;
+  losses: number;
+  titles: number;
+  recentForm: ('W' | 'L')[];
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  tag: string;
+  country: string;
+  region: string;
+  tier: 1 | 2 | 3 | 4; // 1: Elite Mundial, 2: Challenger, 3: Semi-Pro, 4: Amador
+  points: number;       // Pontos no ranking mundial
+  reputation: number;   // 0 - 100
+  budget: number;       // Saldo financeiro ($)
+  tactics: TeamTactics;
+  mapMastery: Record<string, number>; // ID do Mapa -> Porcentagem de domínio (0 - 100)
+  colorPrimary: string;   // Cor Hexadecimal (ex: #00f0ff)
+  colorSecondary: string; // Cor Hexadecimal (ex: #7000ff)
+  isUser: boolean;        // Se o jogador está controlando esta equipe
+  stats: TeamStats;
+  sponsorId?: string;               // Patrocinador ativo
+  sponsorWeeksRemaining?: number;   // Semanas restantes do patrocínio
+  staff: {
+    coachId?: string;
+    analystId?: string;
+    psychologistId?: string;
+    scoutId?: string;
+    physioId?: string;
+  };
+}
+
+export interface GameMap {
+  id: string;
+  name: string;
+  status: 'active' | 'reserve' | 'historical' | 'casual';
+  aimRequirement: number;        // Peso para duelos de mira pura (0-100)
+  tacticalRequirement: number;   // Peso para leitura tática (0-100)
+  utilityRequirement: number;    // Peso para uso de utilitárias (0-100)
+  awpImpact: number;             // Impacto de rifles de precisão (0-100)
+  sideBias: 'CT' | 'TR' | 'balanced'; // Vantagem nativa de lado
+  pace: 'slow' | 'medium' | 'fast';   // Ritmo natural de jogo
+  description: string;
+}
+
+export interface RoundSimEvent {
+  time: string; // Ex: "1:15"
+  description: string;
+  type: 'kill' | 'plant' | 'defuse' | 'save' | 'clutch' | 'tactical' | 'economy';
+  killerId?: string;
+  victimId?: string;
+  weaponUsed?: string;
+}
+
+export interface RoundSim {
+  roundNumber: number;
+  winningTeamSide: 'CT' | 'TR';
+  winningTeamId: string;
+  winReason: 'elimination' | 'c4_explosion' | 'defuse' | 'time_ran_out';
+  events: RoundSimEvent[];
+  economyBefore: {
+    teamA: 'eco' | 'force' | 'buy' | 'half';
+    teamB: 'eco' | 'force' | 'buy' | 'half';
+  };
+  cashAft: Record<string, number>; // ID do jogador -> Saldo após o round
+}
+
+export interface MatchLivePlayerStats {
+  kills: number;
+  deaths: number;
+  assists: number;
+  damage: number;
+  mvps: number;
+  alive: boolean;
+  hp: number;
+  weapon: string;
+  helmet: boolean;
+  hasC4: boolean;
+  cash: number;
+}
+
+export interface Match {
+  id: string;
+  teamAId: string;
+  teamBId: string;
+  competitionId: string;
+  mapId: string;
+  scoreA: number;
+  scoreB: number;
+  halfScores: { scoreA: number; scoreB: number }[]; // Placar ao fim de cada metade
+  rounds: RoundSim[];
+  isFinished: boolean;
+  winnerId?: string;
+  mvpPlayerId?: string;
+  liveStats: Record<string, MatchLivePlayerStats>; // ID do jogador -> status na partida
+}
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  weeklyIncome: number;
+  winBonus: number;
+  titleBonus: number;
+  durationWeeks: number;
+  minReputation: number;
+  requirements: string;
+}
+
+export interface Staff {
+  id: string;
+  name: string;
+  nationality: string;
+  role: 'coach' | 'analyst' | 'psychologist' | 'scout' | 'physio';
+  level: number; // 1 a 5 estrelas
+  salary: number;
+  effectDescription: string;
+  reputation: number;
+}
+
+export interface NewsItem {
+  id: string;
+  title: string;
+  content: string;
+  category: 'transfers' | 'results' | 'scandal' | 'base' | 'general';
+  week: number;
+  dateStr: string;
+}
+
+export interface TournamentMatch {
+  matchId: string;
+  roundName: string; // Ex: "Quartas de Final", "Semifinal", "Grande Final"
+}
+
+export interface Tournament {
+  id: string;
+  name: string;
+  tier: 1 | 2 | 3 | 4;
+  prizePool: number;
+  teamIds: string[];
+  format: 'bracket' | 'groups';
+  isFinished: boolean;
+  championId?: string;
+  mvpPlayerId?: string;
+  currentRound: number;
+  matches: TournamentMatch[];
+  weekScheduled: number;
+}
+
+export interface SaveGame {
+  id: string;
+  saveName: string;
+  createdAt: string;
+  managerName: string;
+  managerNationality: string;
+  currentWeek: number;
+  currentSeason: number;
+  userTeamId: string;
+  teams: Record<string, Team>;
+  players: Record<string, Player>;
+  maps: Record<string, GameMap>;
+  sponsors: Record<string, Sponsor>;
+  staffList: Record<string, Staff>;
+  tournaments: Record<string, Tournament>;
+  historyNews: NewsItem[];
+  financialHistory: {
+    week: number;
+    description: string;
+    amount: number; // positivo (receita) ou negativo (despesa)
+  }[];
+}
