@@ -16,6 +16,7 @@ import { Saves } from './pages/Saves';
 import { MatchSim } from './pages/MatchSim';
 import { MatchPreview } from './pages/MatchPreview';
 import { MatchResult } from './pages/MatchResult';
+import { PlayerProfile } from './pages/PlayerProfile';
 
 function App() {
   const { currentScreen, gameLoaded, carregarJogo } = useGameStore();
@@ -57,6 +58,8 @@ function App() {
         return <DataEditor />;
       case 'saves':
         return <Saves />;
+      case 'playerProfile':
+        return <PlayerProfile />;
       case 'matchPreview':
         return <MatchPreview />;
       case 'matchResult':

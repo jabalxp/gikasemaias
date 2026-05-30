@@ -22,6 +22,24 @@ const randomRange = (min: number, max: number) => Math.random() * (max - min) + 
 // Escolhe um elemento aleatório
 const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
+// Pesos de balanceamento da simulação (Fase F — calibrados via balanceHarness.ts)
+const BALANCE_WEIGHTS = {
+  rngAmplitude: 62,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
+  aimWeight: 1.0,
+  overallWeight: 0.15,   // overall pesa, mas não decide tudo (spec §26)
+  gamesenseWeight: 0.08,
+  utilityWeight: 0.08,
+  clutchWeight: 0.10,
+} as const;
+
+// RNG com distribuição ~normal (soma de 6 uniformes), centrada em 0. Cauda mais espessa que
+// uniforme → permite zebras controladas sem inflar a variância média.
+const gaussianRNG = (amplitude: number): number => {
+  let sum = 0;
+  for (let i = 0; i < 6; i++) sum += Math.random();
+  return (sum - 3) * (amplitude / 3);
+};
+
 // Inicializa estatísticas ao vivo de partida para um jogador
 export const initLivePlayerStats = (player: Player, startingCash: number = 800): MatchLivePlayerStats => ({
   kills: 0,
@@ -51,18 +69,18 @@ export const getBuyType = (cash: number): 'eco' | 'force' | 'buy' => {
  * overall sozinho decida tudo. Faixa típica ~0.85 a ~1.30.
  */
 export const computeTeamMod = (team: Team, players: Player[], map: GameMap): number => {
-  // Maestria no mapa (0-100) → 0.90 a 1.15
+  // Maestria no mapa (0-100) → 0.92 a 1.08 (amplitude reduzida para não dominar o resultado)
   const mastery = team.mapMastery[map.id] ?? 50;
-  const masteryFactor = 0.90 + (mastery / 100) * 0.25;
+  const masteryFactor = 0.92 + (mastery / 100) * 0.16;
 
-  // Forma recente (últimos 5 resultados) → ~0.94 a ~1.06
+  // Forma recente (últimos 5 resultados) → ~0.96 a ~1.04
   const recent = team.stats.recentForm.slice(-5);
   const wins = recent.filter(r => r === 'W').length;
-  const formFactor = recent.length > 0 ? 1 + ((wins / recent.length) - 0.5) * 0.12 : 1;
+  const formFactor = recent.length > 0 ? 1 + ((wins / recent.length) - 0.5) * 0.08 : 1;
 
-  // Moral média do elenco titular → 0.95 a 1.08
+  // Moral média do elenco titular → 0.97 a 1.05
   const avgMoral = players.length > 0 ? players.reduce((acc, p) => acc + p.moral, 0) / players.length : 75;
-  const moralFactor = 0.95 + (avgMoral / 100) * 0.13;
+  const moralFactor = 0.97 + (avgMoral / 100) * 0.08;
 
   // Afinidade tática com o ritmo do mapa (leve): agressivo brilha em mapas rápidos; defensivo em lentos
   let tacticFactor = 1.0;
@@ -93,26 +111,29 @@ const resolveClash = (
   const a = attacker.player;
   const d = defender.player;
 
-  // Fator posicional (defensores ganham pequeno bônus)
-  const attackerPosFactor = attacker.side === 'CT' ? 1.05 : 1.0;
-  const defenderPosFactor = defender.side === 'CT' ? 1.10 : 1.0;
+  // Vantagem posicional do CT modulada pelo viés de lado do mapa (antes era fixa e ignorava o mapa):
+  // mapas CT-sided dão mais vantagem à defesa; TR-sided reduzem.
+  const ctEdge = map.sideBias === 'CT' ? 1.05 : map.sideBias === 'TR' ? 0.98 : 1.02;
+  const attackerPosFactor = attacker.side === 'CT' ? ctEdge : 1.0;
+  const defenderPosFactor = defender.side === 'CT' ? ctEdge : 1.0;
 
-  // Bônus de utilitária e clutch (este só no pós-plant)
-  const attUtilityBonus = a.attributes.utility * 0.15 + (map.utilityRequirement * 0.05);
-  const defUtilityBonus = d.attributes.utility * 0.15 + (map.utilityRequirement * 0.05);
-  const attClutchBonus = isPostPlant ? a.attributes.clutch * 0.25 : 0;
-  const defClutchBonus = isPostPlant ? d.attributes.clutch * 0.25 : 0;
+  // Bônus de utilitária e clutch (clutch só no pós-plant), com pesos normalizados
+  const attUtilityBonus = a.attributes.utility * BALANCE_WEIGHTS.utilityWeight + (map.utilityRequirement * 0.03);
+  const defUtilityBonus = d.attributes.utility * BALANCE_WEIGHTS.utilityWeight + (map.utilityRequirement * 0.03);
+  const attClutchBonus = isPostPlant ? a.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
+  const defClutchBonus = isPostPlant ? d.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
 
-  // Poder bruto: mira (com peso de arma e posição) + gamesense + OVERALL geral + utilitárias + clutch.
-  // Em seguida modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do TIME
-  // (mapMastery/forma/moral/tática). RNG controlado (1-28) preserva zebras sem aleatoriedade excessiva.
-  let attPower = (a.attributes.aim * attackerWeaponWeight * attackerPosFactor)
-    + (a.attributes.gamesense * 0.1) + (a.overall * 0.3) + attUtilityBonus + attClutchBonus;
-  attPower = attPower * playerCondition(a) * attackerTeamMod + randomRange(1, 28);
+  // Poder: mira (peso de arma e posição) + gamesense + OVERALL (peso reduzido) + utilitárias + clutch,
+  // modulado pela CONDIÇÃO individual (moral/forma/energia) e pelo MOD do TIME, com RNG ~normal.
+  let attPower = (a.attributes.aim * attackerWeaponWeight * attackerPosFactor * BALANCE_WEIGHTS.aimWeight)
+    + (a.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (a.overall * BALANCE_WEIGHTS.overallWeight)
+    + attUtilityBonus + attClutchBonus;
+  attPower = attPower * playerCondition(a) * attackerTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
-  let defPower = (d.attributes.aim * defenderWeaponWeight * defenderPosFactor)
-    + (d.attributes.gamesense * 0.1) + (d.overall * 0.3) + defUtilityBonus + defClutchBonus;
-  defPower = defPower * playerCondition(d) * defenderTeamMod + randomRange(1, 28);
+  let defPower = (d.attributes.aim * defenderWeaponWeight * defenderPosFactor * BALANCE_WEIGHTS.aimWeight)
+    + (d.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (d.overall * BALANCE_WEIGHTS.overallWeight)
+    + defUtilityBonus + defClutchBonus;
+  defPower = defPower * playerCondition(d) * defenderTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
   const winner = attPower >= defPower ? 'attacker' : 'defender';
   return {
@@ -304,8 +325,11 @@ export const simulateRound = (
   const avgTRUtility = playersTR.reduce((acc, p) => acc + p.attributes.utility, 0) / playersTR.length;
   const avgCTUtility = playersCT.reduce((acc, p) => acc + p.attributes.utility, 0) / playersCT.length;
 
-  // Probabilidade do TR plantar a C4
-  const plantChance = (aliveTRCount / (aliveTRCount + aliveCTCount)) * 60 + (avgTRUtility - avgCTUtility) * 0.3 + 20;
+  // Probabilidade do TR plantar a C4 (com tetos: nunca >75% nem <5%) — antes o piso +20 inflava o plant
+  const plantBase = 24;
+  const survivalRatio = (aliveTRCount / (aliveTRCount + aliveCTCount + 0.001)) * 50;
+  const utilityEdge = (avgTRUtility - avgCTUtility) * 0.2;
+  const plantChance = Math.min(75, Math.max(5, plantBase + survivalRatio + utilityEdge));
   const isC4Planted = Math.random() * 100 < plantChance && aliveTRCount > 0;
 
   let roundWinnerId = '';

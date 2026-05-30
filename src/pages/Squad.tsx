@@ -1,9 +1,9 @@
 import React from 'react';
 import { useGameStore } from '../store/useGameStore';
-import { UserCheck, UserMinus, Shield, Zap, Target, Star, Skull } from 'lucide-react';
+import { UserCheck, UserMinus, Shield, Zap, Target, Star, Skull, User } from 'lucide-react';
 
 export const Squad: React.FC = () => {
-  const { players, userTeamId, definirTitular, definirPapelEspecial, venderJogador } = useGameStore();
+  const { players, userTeamId, definirTitular, definirPapelEspecial, venderJogador, setSelectedPlayerId, setScreen } = useGameStore();
 
   const userPlayers = Object.values(players).filter(p => p.teamId === userTeamId);
 
@@ -125,6 +125,15 @@ export const Squad: React.FC = () => {
             </button>
           )}
         </div>
+
+        {/* VER PERFIL (drill-down) */}
+        <button
+          onClick={() => { setSelectedPlayerId(p.id); setScreen('playerProfile'); }}
+          className="mt-1.5 w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-extrabold bg-zinc-900 text-slate-300 hover:text-brand-cyan border border-brand-border hover:border-brand-cyan/40 transition-colors uppercase"
+        >
+          <User className="w-3.5 h-3.5" />
+          <span>Ver Perfil</span>
+        </button>
       </div>
     );
   };
