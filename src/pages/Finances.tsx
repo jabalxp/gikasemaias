@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { DollarSign, Wallet, Calendar, ShieldCheck, Trophy, Repeat, XCircle } from 'lucide-react';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 export const Finances: React.FC = () => {
   const {
@@ -14,6 +15,8 @@ export const Finances: React.FC = () => {
     addToast,
   } = useGameStore();
   const userTeam = teams[userTeamId];
+
+  const [confirmRescind, setConfirmRescind] = useState(false);
 
   if (!userTeam) return null;
 
@@ -42,8 +45,13 @@ export const Finances: React.FC = () => {
 
   const handleRescind = (): void => {
     if (!activeSponsor) return;
+    setConfirmRescind(true);
+  };
+
+  const handleConfirmRescind = (): void => {
     const result = rescindirPatrocinio();
     addToast(result.message, result.success ? 'success' : 'error');
+    setConfirmRescind(false);
   };
 
   return (
@@ -226,6 +234,20 @@ export const Finances: React.FC = () => {
         </div>
 
       </div>
+
+      <ConfirmModal
+        open={confirmRescind && !!activeSponsor}
+        danger
+        title="Rescindir Patrocínio"
+        message={
+          activeSponsor
+            ? `Confirmar a rescisão do contrato com ${activeSponsor.name}? Você pagará uma multa de $${estimatedPenalty.toLocaleString()} e perderá a receita semanal restante.`
+            : ''
+        }
+        confirmLabel="Rescindir"
+        onConfirm={handleConfirmRescind}
+        onCancel={() => setConfirmRescind(false)}
+      />
     </div>
   );
 };

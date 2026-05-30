@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { defaultStaff } from '../game/data/defaultStaff';
 import { Staff as StaffType } from '../types';
 import { UserCog, Star, Brain, ClipboardList, HeartPulse, Search, UserMinus, UserPlus } from 'lucide-react';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 type ManagedRole = 'coach' | 'analyst' | 'psychologist' | 'physio';
 
@@ -37,6 +38,8 @@ export const Staff: React.FC = () => {
   const { userTeamId, teams, staffList, contratarStaff, demitirStaff, addToast } = useGameStore();
   const userTeam = teams[userTeamId];
 
+  const [fireRole, setFireRole] = useState<ManagedRole | null>(null);
+
   if (!userTeam) return null;
 
   const handleHire = (member: StaffType): void => {
@@ -45,8 +48,14 @@ export const Staff: React.FC = () => {
   };
 
   const handleFire = (role: ManagedRole): void => {
-    const result = demitirStaff(role);
+    setFireRole(role);
+  };
+
+  const handleConfirmFire = (): void => {
+    if (!fireRole) return;
+    const result = demitirStaff(fireRole);
     addToast(result.message, result.success ? 'success' : 'error');
+    setFireRole(null);
   };
 
   // Membros atualmente contratados, indexados por role gerenciado
@@ -205,6 +214,20 @@ export const Staff: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!fireRole}
+        danger
+        title="Demitir Profissional"
+        message={
+          fireRole && hiredByRole[fireRole]
+            ? `Confirmar a demissão de ${hiredByRole[fireRole]!.name} (${ROLE_META[fireRole].label})? Você perderá os bônus deste cargo imediatamente.`
+            : ''
+        }
+        confirmLabel="Demitir"
+        onConfirm={handleConfirmFire}
+        onCancel={() => setFireRole(null)}
+      />
     </div>
   );
 };

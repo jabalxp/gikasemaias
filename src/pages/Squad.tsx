@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { UserCheck, UserMinus, Shield, Zap, Target, Star, Skull, User } from 'lucide-react';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 export const Squad: React.FC = () => {
   const { players, userTeamId, definirTitular, definirPapelEspecial, venderJogador, setSelectedPlayerId, setScreen, addToast } = useGameStore();
+
+  const [sellPlayerId, setSellPlayerId] = useState<string | null>(null);
+  const sellPlayer = sellPlayerId ? players[sellPlayerId] : undefined;
 
   const userPlayers = Object.values(players).filter(p => p.teamId === userTeamId);
 
@@ -20,15 +24,19 @@ export const Squad: React.FC = () => {
     definirTitular(id, nextStatus);
   };
 
-  const handleRoleChange = (id: string, role: 'IGL' | 'AWPer') => {
+  const handleRoleChange = (id: string, role: 'IGL' | 'AWPer' | 'Rifler') => {
     definirPapelEspecial(id, role);
   };
 
   const handleSell = (id: string) => {
-    if (confirm('Tem certeza de que deseja colocar este jogador na lista de transferências e vendê-lo?')) {
-      const res = venderJogador(id);
-      addToast(res.message, res.success ? 'success' : 'error');
-    }
+    setSellPlayerId(id);
+  };
+
+  const handleConfirmSell = () => {
+    if (!sellPlayerId) return;
+    const res = venderJogador(sellPlayerId);
+    addToast(res.message, res.success ? 'success' : 'error');
+    setSellPlayerId(null);
   };
 
   // Renderiza card do jogador
@@ -107,7 +115,7 @@ export const Squad: React.FC = () => {
 
           {p.status === 'titular' ? (
             <select
-              onChange={(e) => handleRoleChange(p.id, e.target.value as 'IGL' | 'AWPer')}
+              onChange={(e) => handleRoleChange(p.id, e.target.value as 'IGL' | 'AWPer' | 'Rifler')}
               value={p.role}
               className="bg-zinc-900 text-slate-300 text-[10px] font-extrabold rounded-lg px-2 py-1.5 border border-brand-border focus:outline-none uppercase"
             >
@@ -189,6 +197,16 @@ export const Squad: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        open={!!sellPlayer}
+        danger
+        title="Vender Jogador"
+        message={sellPlayer ? `Confirmar a venda de ${sellPlayer.nickname}? Ele será colocado na lista de transferências e removido do seu elenco.` : ''}
+        confirmLabel="Vender"
+        onConfirm={handleConfirmSell}
+        onCancel={() => setSellPlayerId(null)}
+      />
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useGameStore } from './store/useGameStore';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { ToastContainer } from './components/layout/ToastContainer';
+import { PageTransition } from './components/layout/PageTransition';
 import { Home } from './pages/Home';
 import { NewGame } from './pages/NewGame';
 import { Dashboard } from './pages/Dashboard';
@@ -89,7 +90,7 @@ function App() {
       return (
         <div className="min-h-screen bg-[#030306] p-8 flex items-center justify-center select-none overflow-y-auto">
           <div className="w-full max-w-5xl">
-            {renderScreen()}
+            <PageTransition key={currentScreen}>{renderScreen()}</PageTransition>
           </div>
         </div>
       );
@@ -107,7 +108,7 @@ function App() {
 
           {/* CONTEÚDO DA PÁGINA COM PADDING */}
           <div className="flex-1 p-8 max-w-7xl w-full mx-auto overflow-y-auto">
-            {renderScreen()}
+            <PageTransition key={currentScreen}>{renderScreen()}</PageTransition>
           </div>
         </main>
       </div>

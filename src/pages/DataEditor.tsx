@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { Player } from '../types';
 import { Search, Save, Edit3, Trash2, UserPlus, RotateCcw } from 'lucide-react';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
 
 export const DataEditor: React.FC = () => {
   const { players, teams, resetarDadosEditor, addToast, editarJogador } = useGameStore();
 
   const [search, setSearch] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Estados locais do editor do jogador selecionado
   const [nick, setNick] = useState('');
@@ -52,6 +54,13 @@ export const DataEditor: React.FC = () => {
     addToast(`Dados do jogador ${nick} salvos e atualizados com sucesso no banco de dados!`, 'success');
   };
 
+  const handleConfirmReset = () => {
+    resetarDadosEditor();
+    setSelectedPlayer(null);
+    setConfirmReset(false);
+    addToast('Base de dados restaurada para os padrões originais.', 'success');
+  };
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -66,11 +75,7 @@ export const DataEditor: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={() => {
-            if (confirm('Tem certeza de que deseja resetar TODOS os dados e saves locais de volta para os padrões reais originais?')) {
-              resetarDadosEditor();
-            }
-          }}
+          onClick={() => setConfirmReset(true)}
           className="flex items-center gap-1.5 px-4 py-2 bg-brand-danger/10 hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/25 rounded-lg text-xs font-bold transition-all duration-200"
         >
           <RotateCcw className="w-4 h-4" />
@@ -220,6 +225,16 @@ export const DataEditor: React.FC = () => {
         </div>
 
       </div>
+
+      <ConfirmModal
+        open={confirmReset}
+        danger
+        title="Resetar Base de Dados"
+        message="Tem certeza de que deseja resetar TODOS os dados e saves locais de volta para os padrões reais originais? Esta ação não pode ser desfeita."
+        confirmLabel="Resetar"
+        onConfirm={handleConfirmReset}
+        onCancel={() => setConfirmReset(false)}
+      />
     </div>
   );
 };

@@ -55,7 +55,7 @@ interface GameState {
   ) => void;
   avancarSemana: () => void;
   definirTitular: (playerId: string, status: 'titular' | 'reserva') => void;
-  definirPapelEspecial: (playerId: string, roleType: 'IGL' | 'AWPer') => void;
+  definirPapelEspecial: (playerId: string, roleType: 'IGL' | 'AWPer' | 'Rifler') => void;
   definirTaticas: (tactics: Team['tactics']) => void;
   definirTreinoSemanal: (intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp', focus: string) => { success: boolean; message: string };
   fazerPropostaContratacao: (playerId: string) => { success: boolean; message: string };
@@ -303,7 +303,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         const oppTeam = teams[oppId];
         const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
         const oppSquad = Object.values(players).filter(p => p.teamId === oppId && p.status === 'titular');
-        const mapSelected = realMaps.find(m => m.status === 'active') ?? realMaps[0];
+        const activeMaps = realMaps.filter(m => m.status === 'active');
+        const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
 
         // Efeito do Analista (Fase D): bônus de veto aplicado ao time do usuário (teamA).
         const analystId = userTeam.staff.analystId;
@@ -1198,7 +1199,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
     const oppSquad = Object.values(players).filter(p => p.teamId === opponentId && p.status === 'titular');
-    const mapSelected = realMaps.find(m => m.status === 'active') ?? realMaps[0];
+    const activeMaps = realMaps.filter(m => m.status === 'active');
+    const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
 
     // Efeito do Analista (Fase D): bônus de veto aplicado ao time do usuário (teamA).
     const analystId = userTeam.staff.analystId;

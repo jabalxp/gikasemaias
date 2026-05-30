@@ -24,7 +24,7 @@ const randomChoice = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.leng
 
 // Pesos de balanceamento da simulação (Fase F — calibrados via balanceHarness.ts)
 const BALANCE_WEIGHTS = {
-  rngAmplitude: 62,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
+  rngAmplitude: 68,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
   aimWeight: 1.0,
   overallWeight: 0.15,   // overall pesa, mas não decide tudo (spec §26)
   gamesenseWeight: 0.08,

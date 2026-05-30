@@ -84,7 +84,7 @@ export const SeasonSummary: React.FC = () => {
       {/* DESEMPENHO DO USUÁRIO */}
       <div>
         <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">
-          Sua Campanha
+          Histórico da Carreira (acumulado)
         </h2>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-brand-card border border-brand-success/30 rounded-2xl p-4 text-center">
