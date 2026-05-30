@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { simulateMapVeto, VetoStep } from '../game/simulation/mapVetoSimulator';
 import { realMaps } from '../game/data/realMaps';
+import { TeamTactics } from '../types';
 import { Sliders, Award, Map, Settings, Play } from 'lucide-react';
 
 export const Tactics: React.FC = () => {
-  const { userTeamId, teams, definirTaticas } = useGameStore();
+  const { userTeamId, teams, definirTaticas, addToast } = useGameStore();
   const userTeam = teams[userTeamId];
 
   // Configurações táticas locais
@@ -28,14 +29,14 @@ export const Tactics: React.FC = () => {
     // Persiste via ação do store (set imutável + salvarJogo). Antes mutava o objeto direto
     // e nada era salvo no disco.
     definirTaticas({ playstyle, tempo, focus, utilityUsage, economyStyle });
-    alert('Configurações táticas aplicadas e salvas com sucesso!');
+    addToast('Configurações táticas aplicadas e salvas com sucesso!', 'success');
   };
 
   const handleRunVeto = () => {
     const opponent = teams[opponentId];
     if (!opponent) return;
 
-    const result = simulateMapVeto(userTeam, opponent, realMaps as any, vetoMode);
+    const result = simulateMapVeto(userTeam, opponent, realMaps, vetoMode);
     setVetoSteps(result.steps);
     setSelectedMaps(result.selectedMapIds);
     setShowVetoResult(true);
@@ -68,7 +69,7 @@ export const Tactics: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Estilo de Jogo</label>
               <select
                 value={playstyle}
-                onChange={(e) => setPlaystyle(e.target.value as any)}
+                onChange={(e) => setPlaystyle(e.target.value as TeamTactics['playstyle'])}
                 className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
               >
                 <option value="very_aggressive">Muito Agressivo</option>
@@ -84,7 +85,7 @@ export const Tactics: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Ritmo de Jogo</label>
               <select
                 value={tempo}
-                onChange={(e) => setTempo(e.target.value as any)}
+                onChange={(e) => setTempo(e.target.value as TeamTactics['tempo'])}
                 className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
               >
                 <option value="explosive">Explosivo (Rápido / Entrada Seca)</option>
@@ -99,7 +100,7 @@ export const Tactics: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Foco Tático Principal</label>
               <select
                 value={focus}
-                onChange={(e) => setFocus(e.target.value as any)}
+                onChange={(e) => setFocus(e.target.value as TeamTactics['focus'])}
                 className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
               >
                 <option value="default">Default / Controle de Mapa Neutro</option>
@@ -116,7 +117,7 @@ export const Tactics: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Uso de Utilitários</label>
               <select
                 value={utilityUsage}
-                onChange={(e) => setUtilityUsage(e.target.value as any)}
+                onChange={(e) => setUtilityUsage(e.target.value as TeamTactics['utilityUsage'])}
                 className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
               >
                 <option value="low">Baixo (Duelos Físicos)</option>
@@ -131,7 +132,7 @@ export const Tactics: React.FC = () => {
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Gestão Econômica</label>
               <select
                 value={economyStyle}
-                onChange={(e) => setEconomyStyle(e.target.value as any)}
+                onChange={(e) => setEconomyStyle(e.target.value as TeamTactics['economyStyle'])}
                 className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan uppercase"
               >
                 <option value="eco">Econômica (Poupa para Full Buys)</option>
@@ -164,7 +165,7 @@ export const Tactics: React.FC = () => {
                 <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Formato</label>
                 <select
                   value={vetoMode}
-                  onChange={(e) => setVetoMode(e.target.value as any)}
+                  onChange={(e) => setVetoMode(e.target.value as 'MD1' | 'MD3' | 'MD5')}
                   className="w-full bg-zinc-950 border border-brand-border text-white text-sm font-semibold rounded-lg px-4 py-2.5 focus:outline-none focus:border-brand-cyan"
                 >
                   <option value="MD1">MD1 (1 Mapa)</option>

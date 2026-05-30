@@ -110,7 +110,7 @@ export const NewGame: React.FC = () => {
             {difficulties.map((diff) => (
               <div
                 key={diff.id}
-                onClick={() => setDifficulty(diff.id as any)}
+                onClick={() => setDifficulty(diff.id as 'facil' | 'normal' | 'dificil' | 'hardcore')}
                 className={`p-3 rounded-xl border cursor-pointer transition-all duration-300 ${
                   difficulty === diff.id
                     ? 'border-brand-purple bg-brand-purple/10'

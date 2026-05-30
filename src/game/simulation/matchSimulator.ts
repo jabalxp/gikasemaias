@@ -68,10 +68,11 @@ export const getBuyType = (cash: number): 'eco' | 'force' | 'buy' => {
  * no poder de cada jogador, de modo que mapa/moral/forma/tática importem — sem que o
  * overall sozinho decida tudo. Faixa típica ~0.85 a ~1.30.
  */
-export const computeTeamMod = (team: Team, players: Player[], map: GameMap): number => {
+export const computeTeamMod = (team: Team, players: Player[], map: GameMap, analystLevel = 0): number => {
   // Maestria no mapa (0-100) → 0.92 a 1.08 (amplitude reduzida para não dominar o resultado)
+  // Analista de mapas (Staff role 'analyst') melhora o estudo de veto: +0.02 por nível.
   const mastery = team.mapMastery[map.id] ?? 50;
-  const masteryFactor = 0.92 + (mastery / 100) * 0.16;
+  const masteryFactor = 0.92 + (mastery / 100) * 0.16 + (analystLevel > 0 ? analystLevel * 0.02 : 0);
 
   // Forma recente (últimos 5 resultados) → ~0.96 a ~1.04
   const recent = team.stats.recentForm.slice(-5);
@@ -155,7 +156,8 @@ export const simulateRound = (
   economyState: {
     lossStreakA: number;
     lossStreakB: number;
-  }
+  },
+  analystLevels: { a?: number; b?: number } = {}
 ): RoundSim => {
   const events: RoundSimEvent[] = [];
   
@@ -241,8 +243,8 @@ export const simulateRound = (
   const playersCT = sides.teamA === 'CT' ? livePlayersA : livePlayersB;
 
   // Modificadores de time (mapMastery/forma/moral/tática) aplicados em cada duelo (spec §26)
-  const modA = computeTeamMod(teamA, livePlayersA, map);
-  const modB = computeTeamMod(teamB, livePlayersB, map);
+  const modA = computeTeamMod(teamA, livePlayersA, map, analystLevels.a ?? 0);
+  const modB = computeTeamMod(teamB, livePlayersB, map, analystLevels.b ?? 0);
   const modTR = sides.teamA === 'TR' ? modA : modB;
   const modCT = sides.teamA === 'CT' ? modA : modB;
 
@@ -380,7 +382,8 @@ export const simulateRound = (
           description: `[TR] ${pTR.nickname} segurou o avanço e eliminou [CT] ${pCT.nickname} (${liveStats[pTR.id].weapon}).`,
           type: 'kill',
           killerId: pTR.id,
-          victimId: pCT.id
+          victimId: pCT.id,
+          weaponUsed: liveStats[pTR.id].weapon
         });
       } else {
         // CT mata TR
@@ -393,7 +396,8 @@ export const simulateRound = (
           description: `[CT] ${pCT.nickname} ganhou o espaço e abateu [TR] ${pTR.nickname} com maestria.`,
           type: 'kill',
           killerId: pCT.id,
-          victimId: pTR.id
+          victimId: pTR.id,
+          weaponUsed: liveStats[pCT.id].weapon
         });
       }
 
@@ -475,7 +479,8 @@ export const simulateRound = (
           description: `[TR] ${pTR.nickname} venceu o duelo direto e eliminou [CT] ${pCT.nickname}.`,
           type: 'kill',
           killerId: pTR.id,
-          victimId: pCT.id
+          victimId: pCT.id,
+          weaponUsed: liveStats[pTR.id].weapon
         });
       } else {
         liveStats[pTR.id].alive = false;
@@ -487,7 +492,8 @@ export const simulateRound = (
           description: `[CT] ${pCT.nickname} segurou a entrada eliminando [TR] ${pTR.nickname}.`,
           type: 'kill',
           killerId: pCT.id,
-          victimId: pTR.id
+          victimId: pTR.id,
+          weaponUsed: liveStats[pCT.id].weapon
         });
       }
       maxDefesaDuelos--;
@@ -625,7 +631,8 @@ export const simulateWholeMatchQuick = (
   playersA: Player[],
   playersB: Player[],
   map: GameMap,
-  competitionId: string
+  competitionId: string,
+  analystLevels: { a?: number; b?: number } = {}
 ): Match => {
   const liveStats: Record<string, MatchLivePlayerStats> = {};
   
@@ -682,7 +689,8 @@ export const simulateWholeMatchQuick = (
       playersB,
       liveStats,
       sides,
-      { lossStreakA, lossStreakB }
+      { lossStreakA, lossStreakB },
+      analystLevels
     );
 
     rounds.push(roundResult);

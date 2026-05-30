@@ -4,7 +4,7 @@ import { Player } from '../types';
 import { Search, Save, Edit3, Trash2, UserPlus, RotateCcw } from 'lucide-react';
 
 export const DataEditor: React.FC = () => {
-  const { players, teams, resetarDadosEditor } = useGameStore();
+  const { players, teams, resetarDadosEditor, addToast, editarJogador } = useGameStore();
 
   const [search, setSearch] = useState('');
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -38,24 +38,18 @@ export const DataEditor: React.FC = () => {
 
   const handleSavePlayer = () => {
     if (!selectedPlayer) return;
-    
-    // Atualiza jogador na store e salva no LocalStorage
-    selectedPlayer.nickname = nick;
-    selectedPlayer.name = realName;
-    selectedPlayer.role = role;
-    selectedPlayer.attributes = {
-      aim,
-      gamesense,
-      clutch,
-      utility,
-      igl
-    };
-    
-    // Recalcula o overall
-    selectedPlayer.overall = Math.round((aim + gamesense + clutch + utility + igl) / 5);
 
-    alert(`Dados do jogador ${nick} salvos e atualizados com sucesso no banco de dados!`);
-    useGameStore.getState().salvarJogo();
+    // Atualização IMUTÁVEL via ação do store (antes mutava o objeto direto, sem set/re-render)
+    const patch: Partial<Player> = {
+      nickname: nick,
+      name: realName,
+      role,
+      attributes: { aim, gamesense, clutch, utility, igl },
+      overall: Math.round((aim + gamesense + clutch + utility + igl) / 5),
+    };
+    editarJogador(selectedPlayer.id, patch);
+    setSelectedPlayer({ ...selectedPlayer, ...patch });
+    addToast(`Dados do jogador ${nick} salvos e atualizados com sucesso no banco de dados!`, 'success');
   };
 
   return (
@@ -167,7 +161,7 @@ export const DataEditor: React.FC = () => {
                     <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1">Função</label>
                     <select
                       value={role}
-                      onChange={(e) => setRole(e.target.value as any)}
+                      onChange={(e) => setRole(e.target.value as Player['role'])}
                       className="w-full bg-zinc-950 border border-brand-border text-xs font-bold rounded-lg px-3 py-1.5 focus:outline-none focus:border-brand-cyan"
                     >
                       <option value="Rifler">Rifler</option>

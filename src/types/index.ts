@@ -202,6 +202,34 @@ export interface Tournament {
   weekScheduled: number;
 }
 
+export interface SeasonChampionSnapshot {
+  tournamentId: string;
+  tournamentName: string;
+  championId: string;
+  championName: string;
+  championTag: string;
+  prizePool: number;
+  isUserChampion: boolean;
+}
+
+export interface SeasonSummary {
+  season: number;          // Temporada que foi encerrada
+  champions: SeasonChampionSnapshot[];
+  userStats: {
+    wins: number;
+    losses: number;
+    titles: number;
+  };
+}
+
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
+
+export interface Toast {
+  id: string;
+  message: string;
+  type: ToastType;
+}
+
 export interface SaveGame {
   id: string;
   saveName: string;
@@ -211,6 +239,7 @@ export interface SaveGame {
   currentWeek: number;
   currentSeason: number;
   userTeamId: string;
+  difficulty: 'facil' | 'normal' | 'dificil' | 'hardcore';
   teams: Record<string, Team>;
   players: Record<string, Player>;
   maps: Record<string, GameMap>;
@@ -224,4 +253,5 @@ export interface SaveGame {
     amount: number; // positivo (receita) ou negativo (despesa)
   }[];
   trainingPlan?: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
+  youthProspects?: Player[]; // Jovens observados na base/scout (opcional p/ saves antigos)
 }

@@ -1,30 +1,50 @@
 import React from 'react';
 import { useGameStore } from '../store/useGameStore';
-import { defaultSponsors } from '../game/data/defaultSponsors';
-import { DollarSign, Wallet, Calendar, ShieldCheck, ShoppingCart } from 'lucide-react';
+import { DollarSign, Wallet, Calendar, ShieldCheck, Trophy, Repeat, XCircle } from 'lucide-react';
 
 export const Finances: React.FC = () => {
-  const { userTeamId, teams, sponsors, assinarPatrocinio, financialHistory } = useGameStore();
+  const {
+    userTeamId,
+    teams,
+    sponsors,
+    assinarPatrocinio,
+    rescindirPatrocinio,
+    renegociarPatrocinio,
+    financialHistory,
+    addToast,
+  } = useGameStore();
   const userTeam = teams[userTeamId];
 
   if (!userTeam) return null;
 
-  const handleSignSponsor = (id: string) => {
-    const sp = defaultSponsors.find(s => s.id === id);
+  const sponsorList = Object.values(sponsors);
+  const activeSponsor = userTeam.sponsorId ? sponsors[userTeam.sponsorId] : undefined;
+  const weeksRemaining = userTeam.sponsorWeeksRemaining ?? 0;
+  const canRenegotiate = !!activeSponsor && weeksRemaining <= 4;
+  const progressPct = activeSponsor
+    ? Math.max(0, Math.min(100, (weeksRemaining / activeSponsor.durationWeeks) * 100))
+    : 0;
+  const estimatedPenalty = activeSponsor
+    ? Math.max(0, Math.round(activeSponsor.weeklyIncome * weeksRemaining * 0.2))
+    : 0;
+
+  const handleSignSponsor = (id: string): void => {
+    const sp = sponsors[id];
     if (!sp) return;
-
-    if (userTeam.reputation < sp.minReputation) {
-      alert(`Negado! Sua equipe precisa de pelo menos ${sp.minReputation} de Reputação para assinar com a ${sp.name}. Sua reputação atual é ${userTeam.reputation}.`);
-      return;
-    }
-
-    if (confirm(`Deseja assinar contrato com o patrocinador ${sp.name}?\n\nDuração: ${sp.durationWeeks} semanas\nReceita Semanal: $${sp.weeklyIncome.toLocaleString()}\nBônus por Vitória: $${sp.winBonus.toLocaleString()}\n\nIsso substituirá seu patrocinador ativo.`)) {
-      assinarPatrocinio(id);
-      alert(`Contrato assinado com a ${sp.name}! Receita e bônus aplicados.`);
-    }
+    const result = assinarPatrocinio(id);
+    addToast(result.message, result.success ? 'success' : 'error');
   };
 
-  const activeSponsor = defaultSponsors.find(s => s.id === userTeam.sponsorId);
+  const handleRenegotiate = (): void => {
+    const result = renegociarPatrocinio();
+    addToast(result.message, result.success ? 'success' : 'error');
+  };
+
+  const handleRescind = (): void => {
+    if (!activeSponsor) return;
+    const result = rescindirPatrocinio();
+    addToast(result.message, result.success ? 'success' : 'error');
+  };
 
   return (
     <div className="space-y-6">
@@ -45,8 +65,70 @@ export const Finances: React.FC = () => {
         </div>
       </div>
 
+      {/* PAINEL DO PATROCINADOR ATIVO */}
+      {activeSponsor && (
+        <div className="bg-brand-card border border-brand-success/40 p-5 rounded-2xl glow-cyan">
+          <div className="flex justify-between items-start mb-4">
+            <div>
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-brand-success" />
+                <span>Patrocinador Ativo</span>
+              </h3>
+              <p className="text-lg font-black text-white mt-1">{activeSponsor.name}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Semanas Restantes</span>
+              <span className="text-2xl font-black text-brand-cyan text-neon-cyan flex items-center justify-end gap-1.5">
+                <Calendar className="w-4 h-4" />
+                {weeksRemaining}
+              </span>
+            </div>
+          </div>
+
+          {/* Barra de progresso do contrato */}
+          <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-brand-border mb-1.5">
+            <div
+              className="h-full bg-brand-success transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <p className="text-[9px] font-bold text-slate-500 mb-4 text-right">
+            {weeksRemaining} de {activeSponsor.durationWeeks} semanas
+          </p>
+
+          <div className="grid grid-cols-3 gap-2.5 text-[10px] font-bold text-slate-500 bg-zinc-950 p-3 rounded-lg border border-brand-border mb-4">
+            <div>Receita Semanal: <span className="text-white font-extrabold block mt-0.5">${activeSponsor.weeklyIncome.toLocaleString()}</span></div>
+            <div>Bônus Vitória: <span className="text-brand-cyan font-extrabold block mt-0.5">${activeSponsor.winBonus.toLocaleString()}</span></div>
+            <div>Bônus Título: <span className="text-brand-purple font-extrabold block mt-0.5">${activeSponsor.titleBonus.toLocaleString()}</span></div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={handleRenegotiate}
+              disabled={!canRenegotiate}
+              className={`flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[10px] font-extrabold uppercase transition-colors ${
+                canRenegotiate
+                  ? 'bg-brand-cyan hover:bg-brand-cyan/80 text-zinc-950'
+                  : 'bg-zinc-900 text-slate-500 border border-brand-border cursor-not-allowed'
+              }`}
+              title={canRenegotiate ? 'Renovar contrato' : 'Disponível apenas nas últimas 4 semanas'}
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              <span>Renegociar</span>
+            </button>
+            <button
+              onClick={handleRescind}
+              className="flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[10px] font-extrabold uppercase transition-colors bg-brand-danger/15 hover:bg-brand-danger/25 text-brand-danger border border-brand-danger/40"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Rescindir (Multa ${estimatedPenalty.toLocaleString()})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* COLUNA DA ESQUERDA: EXTRATO / HISTÓRICO FINANCEIRO */}
         <div className="bg-brand-card border border-brand-border p-5 rounded-2xl lg:col-span-1 space-y-4 flex flex-col justify-between h-[450px]">
           <div>
@@ -85,14 +167,16 @@ export const Finances: React.FC = () => {
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {defaultSponsors.map(sp => {
+            {sponsorList.map(sp => {
               const isCurrent = userTeam.sponsorId === sp.id;
               const hasRep = userTeam.reputation >= sp.minReputation;
-              
+              const hasActiveContract = !!activeSponsor;
+              const canSign = hasRep && !hasActiveContract;
+
               return (
                 <div key={sp.id} className={`p-4 rounded-xl border flex flex-col justify-between transition-all duration-300 ${
-                  isCurrent 
-                    ? 'border-brand-success bg-brand-success/5' 
+                  isCurrent
+                    ? 'border-brand-success bg-brand-success/5'
                     : 'border-brand-border bg-zinc-950/40'
                 }`}>
                   <div>
@@ -104,7 +188,7 @@ export const Finances: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    
+
                     <p className="text-[10px] text-slate-400 font-medium leading-normal mb-3.5 h-10 overflow-hidden">
                       {sp.requirements}
                     </p>
@@ -112,6 +196,10 @@ export const Finances: React.FC = () => {
                     <div className="grid grid-cols-2 gap-1.5 text-[9px] font-bold text-slate-500 bg-zinc-950 p-2.5 rounded-lg border border-brand-border mb-3.5">
                       <div>Ganho Semanal: <span className="text-white font-extrabold">${sp.weeklyIncome.toLocaleString()}</span></div>
                       <div>Bônus Vitória: <span className="text-brand-cyan font-extrabold">${sp.winBonus.toLocaleString()}</span></div>
+                      <div className="flex items-center gap-1">
+                        <Trophy className="w-2.5 h-2.5 text-brand-purple" />
+                        Bônus Título: <span className="text-brand-purple font-extrabold">${sp.titleBonus.toLocaleString()}</span>
+                      </div>
                       <div>Duração: <span className="text-white font-extrabold">{sp.durationWeeks} sem</span></div>
                       <div>Exigência Rep: <span className={`font-black ${hasRep ? 'text-brand-success' : 'text-brand-danger'}`}>{sp.minReputation} pts</span></div>
                     </div>
@@ -120,14 +208,15 @@ export const Finances: React.FC = () => {
                   {!isCurrent && (
                     <button
                       onClick={() => handleSignSponsor(sp.id)}
-                      disabled={!hasRep}
+                      disabled={!canSign}
                       className={`w-full py-2 rounded-lg text-[10px] font-extrabold uppercase transition-colors ${
-                        hasRep 
-                          ? 'bg-brand-purple hover:bg-brand-purple/80 text-white' 
+                        canSign
+                          ? 'bg-brand-purple hover:bg-brand-purple/80 text-white'
                           : 'bg-zinc-900 text-slate-500 border border-brand-border cursor-not-allowed'
                       }`}
+                      title={hasActiveContract ? 'Rescinda o contrato ativo antes de assinar outro' : (!hasRep ? 'Reputação insuficiente' : 'Assinar')}
                     >
-                      Assinar Patrocínio
+                      {hasActiveContract ? 'Contrato Ativo' : 'Assinar Patrocínio'}
                     </button>
                   )}
                 </div>

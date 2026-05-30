@@ -3,7 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { UserCheck, UserMinus, Shield, Zap, Target, Star, Skull, User } from 'lucide-react';
 
 export const Squad: React.FC = () => {
-  const { players, userTeamId, definirTitular, definirPapelEspecial, venderJogador, setSelectedPlayerId, setScreen } = useGameStore();
+  const { players, userTeamId, definirTitular, definirPapelEspecial, venderJogador, setSelectedPlayerId, setScreen, addToast } = useGameStore();
 
   const userPlayers = Object.values(players).filter(p => p.teamId === userTeamId);
 
@@ -14,7 +14,7 @@ export const Squad: React.FC = () => {
     const nextStatus = currentStatus === 'titular' ? 'reserva' : 'titular';
     // Feedback explícito ao tentar escalar com o time já cheio (antes o store negava em silêncio)
     if (nextStatus === 'titular' && titulares.length >= 5) {
-      alert('Você já tem 5 titulares escalados. Reserve um jogador antes de escalar outro.');
+      addToast('Você já tem 5 titulares escalados. Reserve um jogador antes de escalar outro.', 'warning');
       return;
     }
     definirTitular(id, nextStatus);
@@ -27,7 +27,7 @@ export const Squad: React.FC = () => {
   const handleSell = (id: string) => {
     if (confirm('Tem certeza de que deseja colocar este jogador na lista de transferências e vendê-lo?')) {
       const res = venderJogador(id);
-      alert(res.message);
+      addToast(res.message, res.success ? 'success' : 'error');
     }
   };
 
@@ -107,7 +107,7 @@ export const Squad: React.FC = () => {
 
           {p.status === 'titular' ? (
             <select
-              onChange={(e) => handleRoleChange(p.id, e.target.value as any)}
+              onChange={(e) => handleRoleChange(p.id, e.target.value as 'IGL' | 'AWPer')}
               value={p.role}
               className="bg-zinc-900 text-slate-300 text-[10px] font-extrabold rounded-lg px-2 py-1.5 border border-brand-border focus:outline-none uppercase"
             >

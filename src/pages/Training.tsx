@@ -3,7 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { Dumbbell, ShieldAlert, Zap, TrendingUp } from 'lucide-react';
 
 export const Training: React.FC = () => {
-  const { userTeamId, teams, players, definirTreinoSemanal, trainingPlan } = useGameStore();
+  const { userTeamId, teams, players, definirTreinoSemanal, trainingPlan, addToast } = useGameStore();
   const userTeam = teams[userTeamId];
 
   const [intensity, setIntensity] = useState<'leve' | 'normal' | 'pesada' | 'bootcamp'>(trainingPlan.intensity);
@@ -23,7 +23,7 @@ export const Training: React.FC = () => {
   const handleApplyTraining = () => {
     // Persiste o plano no store; o avanço de semana aplica os efeitos de verdade.
     const result = definirTreinoSemanal(intensity, focus);
-    alert(result.message);
+    addToast(result.message, result.success ? 'success' : 'error');
   };
 
   return (
@@ -52,7 +52,7 @@ export const Training: React.FC = () => {
                 {intensities.map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => setIntensity(item.id as any)}
+                    onClick={() => setIntensity(item.id as 'leve' | 'normal' | 'pesada' | 'bootcamp')}
                     className={`p-4 rounded-xl border cursor-pointer transition-all duration-300 ${
                       intensity === item.id
                         ? 'border-brand-success bg-brand-success/10'
