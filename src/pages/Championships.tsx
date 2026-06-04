@@ -65,7 +65,7 @@ function groupMatches(matches: readonly TournamentMatch[]): ReadonlyArray<readon
 }
 
 export const Championships: React.FC = () => {
-  const { tournaments, teams, players, userTeamId, historicoTemporadas } = useGameStore();
+  const { tournaments, teams, players, userTeamId, historicoTemporadas, invitations, isFixedTeam } = useGameStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<ChampTab>('standings');
   const [showHistory, setShowHistory] = useState(false);
@@ -234,9 +234,21 @@ export const Championships: React.FC = () => {
           {/* Cabeçalho do detalhe */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-brand-border">
             <div>
-              <h3 className="text-lg font-black text-white uppercase tracking-tight">{selected.name}</h3>
+              <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
+                <span>{selected.name}</span>
+                {invitations && invitations.some(inv => inv.tournamentId === selected.id) && (
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/40 shrink-0">
+                    CONVIDADO ✉️
+                  </span>
+                )}
+                {isFixedTeam && (selected.tier === 1 || selected.tier === 2) && (
+                  <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 shrink-0">
+                    TIME FIXO 🛡️
+                  </span>
+                )}
+              </h3>
               <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
-                {selected.teamIds.length} times · {formatPrize(selected.prizePool)} em premiação · Formato: {selected.engineFormat ?? selected.format}
+                {selected.teamIds.length} times · {formatPrize(selected.prizePool)} em premiação · Formato: {selected.stageFormat === 'swiss' ? 'Suíço (Swiss)' : selected.stageFormat === 'gsl_groups' ? 'Grupos GSL' : selected.stageFormat === 'round_robin' ? 'Round Robin (Grupos)' : 'Mata-Mata (Single Elim)'}
               </p>
             </div>
             {selected.isFinished && selected.championId && teams[selected.championId] && (
@@ -296,7 +308,154 @@ interface TabProps {
 
 const StandingsTab: React.FC<TabProps> = ({ tournament, teams, userTeamId }) => {
   const standings = tournament.standings ?? [];
-  // RR/Swiss/GSL com tabela materializada → renderiza TABELA ordenada por V, depois saldo.
+  const groups = tournament.groups ?? [];
+
+  // Se o torneio tem grupos definidos (GSL ou Round Robin)
+  if (groups.length > 0) {
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {groups.map((group, gIdx) => {
+          const sortedStandings = [...group.standings].sort(
+            (a, b) => b.wins - a.wins || (b.roundsFor - b.roundsAgainst) - (a.roundsFor - a.roundsAgainst)
+          );
+          return (
+            <div key={gIdx} className="bg-brand-card/40 border border-brand-border/60 rounded-2xl p-4 space-y-3">
+              <h4 className="text-xs font-black uppercase tracking-widest text-brand-purple pb-2 border-b border-brand-border/30 flex justify-between items-center">
+                <span>{group.groupName}</span>
+                {group.isFinished && <span className="text-[8px] bg-brand-success/15 text-brand-success px-1.5 py-0.5 rounded">Finalizado</span>}
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-brand-border/20 text-slate-500 text-[9px] font-bold uppercase tracking-wider">
+                      <th className="py-2 px-1 w-10">Pos</th>
+                      <th className="py-2 px-2">Time</th>
+                      <th className="py-2 px-2 text-center">V-D</th>
+                      <th className="py-2 px-2 text-right pr-2">Saldo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-brand-border/10 text-xs font-semibold">
+                    {sortedStandings.map((row, idx) => {
+                      const team = teams[row.teamId];
+                      const isUser = row.teamId === userTeamId;
+                      const diff = row.roundsFor - row.roundsAgainst;
+                      
+                      // Os top 2 avançam em GSL/Round Robin
+                      const avanca = idx < 2;
+
+                      return (
+                        <tr
+                          key={row.teamId}
+                          className={`hover:bg-zinc-900/30 transition-colors ${
+                            isUser ? 'bg-brand-cyan/5 border-l-2 border-brand-cyan' : 'text-slate-300'
+                          }`}
+                        >
+                          <td className="py-2.5 px-1 font-bold">
+                            <span className={avanca ? 'text-brand-success' : 'text-slate-500'}>
+                              #{idx + 1}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2">
+                            <span className="flex items-center gap-1.5 min-w-0">
+                              {team && <TeamCrest team={team} size={18} />}
+                              <span className="font-bold text-white truncate max-w-[100px]">
+                                {team?.tag ?? row.teamId}
+                              </span>
+                              {avanca && <span className="text-[7px] text-brand-success uppercase font-black tracking-widest bg-brand-success/10 px-1 py-0.2 rounded shrink-0">Class.</span>}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-2 text-center font-black text-white tabular-nums">
+                            <span className="text-brand-success">{row.wins}</span>
+                            <span className="text-slate-600">-</span>
+                            <span className="text-brand-danger">{row.losses}</span>
+                          </td>
+                          <td className={`py-2.5 px-2 text-right pr-2 font-black tabular-nums ${diff >= 0 ? 'text-brand-success' : 'text-brand-danger'}`}>
+                            {diff > 0 ? `+${diff}` : diff}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Se for Swiss, renderiza a tabela materializada com destaque para classificados (3W) e eliminados (3L)
+  if (tournament.stageFormat === 'swiss' && standings.length > 0) {
+    const sorted = [...standings].sort(
+      (a, b) => b.wins - a.wins || (b.roundsFor - b.roundsAgainst) - (a.roundsFor - a.roundsAgainst),
+    );
+    return (
+      <div className="overflow-x-auto bg-brand-card/20 border border-brand-border/40 rounded-2xl p-4">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-brand-border text-slate-500 text-[10px] font-bold uppercase tracking-wider">
+              <th className="py-3 px-2 w-12">Pos</th>
+              <th className="py-3 px-4">Time</th>
+              <th className="py-3 px-4 text-center">V-D</th>
+              <th className="py-3 px-4 text-right pr-4">Status / Saldo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-brand-border text-xs font-semibold">
+            {sorted.map((row, idx) => {
+              const team = teams[row.teamId];
+              const isUser = row.teamId === userTeamId;
+              const diff = row.roundsFor - row.roundsAgainst;
+              const classificado = row.wins >= 3;
+              const eliminado = row.losses >= 3;
+
+              return (
+                <tr
+                  key={row.teamId}
+                  className={`hover:bg-zinc-900/40 transition-colors ${
+                    isUser 
+                      ? 'bg-brand-cyan/5 border-l-4 border-brand-cyan' 
+                      : classificado 
+                        ? 'bg-brand-success/5 text-slate-300' 
+                        : eliminado 
+                          ? 'bg-brand-danger/5 text-slate-500' 
+                          : 'text-slate-300'
+                  }`}
+                >
+                  <td className="py-3 px-2 text-slate-500 font-bold">#{idx + 1}</td>
+                  <td className="py-3 px-4">
+                    <span className="flex items-center gap-2">
+                      {team && <TeamCrest team={team} size={24} />}
+                      <span className="font-bold text-white truncate">{team?.name ?? row.teamId}</span>
+                      {isUser && <span className="text-[8px] bg-brand-cyan/20 text-brand-cyan uppercase font-extrabold tracking-widest px-1.5 py-0.5 rounded">Seu Time</span>}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-center font-black text-white tabular-nums">
+                    <span className="text-brand-success">{row.wins}</span>
+                    <span className="text-slate-600">-</span>
+                    <span className="text-brand-danger">{row.losses}</span>
+                  </td>
+                  <td className="py-3 px-4 text-right pr-4 font-black tabular-nums">
+                    {classificado ? (
+                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-brand-success/20 text-brand-success border border-brand-success/40">Classificado 🚀</span>
+                    ) : eliminado ? (
+                      <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-brand-danger/20 text-brand-danger border border-brand-danger/40">Eliminado ❌</span>
+                    ) : (
+                      <span className={diff >= 0 ? 'text-brand-success' : 'text-brand-danger'}>
+                        {diff > 0 ? `+${diff}` : diff}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // RR sem grupos (fallback) ou chave de playoffs
   if (!isBracketFormat(tournament) && standings.length > 0) {
     const sorted = [...standings].sort(
       (a, b) => b.wins - a.wins || (b.roundsFor - b.roundsAgainst) - (a.roundsFor - a.roundsAgainst),
@@ -347,7 +506,6 @@ const StandingsTab: React.FC<TabProps> = ({ tournament, teams, userTeamId }) => 
     );
   }
 
-  // Bracket: visão de chave — colunas por rodada com os placares.
   return <BracketView tournament={tournament} teams={teams} userTeamId={userTeamId} />;
 };
 

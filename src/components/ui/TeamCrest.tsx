@@ -127,6 +127,8 @@ export const TeamCrest: React.FC<TeamCrestProps> = ({ team, size, shape = 'circl
   // Fonte proporcional ao tamanho; limitada para não estourar em emblemas pequenos.
   const fontSize = Math.max(9, Math.round(size * (initials.length >= 3 ? 0.32 : 0.4)));
 
+  const paddingClass = size <= 24 ? 'p-0.5' : size <= 40 ? 'p-1' : 'p-1.5';
+
   if (hasLogo && !imageFailed) {
     return (
       <img
@@ -136,7 +138,7 @@ export const TeamCrest: React.FC<TeamCrestProps> = ({ team, size, shape = 'circl
         height={size}
         onError={() => setImageFailed(true)}
         style={{ width: size, height: size, borderColor: team.colorSecondary }}
-        className={`object-cover border bg-zinc-950 ${radiusClass} ${className}`}
+        className={`object-contain ${paddingClass} bg-white/10 backdrop-blur-sm border border-white/5 ${radiusClass} ${className}`}
       />
     );
   }

@@ -98,6 +98,7 @@ export interface GameMap {
   sideBias: 'CT' | 'TR' | 'balanced'; // Vantagem nativa de lado
   pace: 'slow' | 'medium' | 'fast';   // Ritmo natural de jogo
   description: string;
+  imageUrl?: string;
 }
 
 export interface RoundSimEvent {
@@ -155,6 +156,30 @@ export interface Match {
   liveStats: Record<string, MatchLivePlayerStats>; // ID do jogador -> status na partida
 }
 
+export interface VetoStep {
+  teamId: string;
+  teamName: string;
+  action: 'ban' | 'pick' | 'decider';
+  mapId: string;
+  mapName: string;
+}
+
+export interface ActiveSeries {
+  tournamentId: string;
+  teamAId: string;
+  teamBId: string;
+  bestOf: 1 | 3 | 5;
+  vetoSteps: VetoStep[];
+  mapIds: string[];
+  currentMapIndex: number;
+  matches: Match[];
+  scoreA: number; // placar acumulado em MAPAS do time A
+  scoreB: number; // placar acumulado em MAPAS do time B
+  isFinished: boolean;
+  winnerId?: string;
+}
+
+
 export interface Sponsor {
   id: string;
   name: string;
@@ -211,6 +236,38 @@ export interface TournamentStanding {
 /** Formato real de simulação do torneio (Fase 3b). Derivado de id/format se ausente. */
 export type TournamentEngineFormat = 'swiss' | 'gsl' | 'roundRobin' | 'singleElim';
 
+/** Formato detalhado da fase de classificação (baseado em formatos reais da HLTV). */
+export type TournamentStageFormat = 'swiss' | 'gsl_groups' | 'round_robin' | 'single_elim';
+
+/** Grupo dentro de um torneio (GSL/RR). */
+export interface TournamentGroup {
+  groupName: string;           // Ex: "Grupo A", "Grupo B"
+  teamIds: string[];
+  standings: TournamentStanding[];
+  matches: TournamentMatch[];  // Jogos dentro do grupo
+  isFinished: boolean;
+}
+
+/** Convite para participar de um torneio na próxima temporada. */
+export interface TournamentInvitation {
+  tournamentId: string;
+  tournamentName: string;
+  tier: 1 | 2 | 3 | 4;
+  reason: 'champion' | 'runner_up' | 'reputation' | 'fixed_slot';
+  season: number;              // Temporada em que o convite foi emitido
+}
+
+/** Resultado do usuário num torneio da temporada (para SeasonSummary). */
+export interface UserTournamentResult {
+  tournamentId: string;
+  tournamentName: string;
+  tier: 1 | 2 | 3 | 4;
+  placement: string;           // "Campeão", "Semifinal", "Eliminado na fase de grupos", etc.
+  wins: number;
+  losses: number;
+  avgRating: number;
+}
+
 export interface Tournament {
   id: string;
   name: string;
@@ -227,6 +284,17 @@ export interface Tournament {
   engineFormat?: TournamentEngineFormat;     // Formato do motor (Fase 3b). Fallback: derivado de id/format.
   standings?: TournamentStanding[];          // Tabela materializada (RR/Swiss/GSL). Opcional p/ saves antigos.
   userOpponents?: string[];                  // Sequência de adversários do usuário por rodada (sem repetição).
+  // Novos campos — formatos reais HLTV
+  stageFormat?: TournamentStageFormat;       // Formato detalhado da fase de classificação
+  groups?: TournamentGroup[];                // Grupos da fase de classificação (GSL/RR)
+  playoffTeamIds?: string[];                 // Times classificados para o playoff
+  bestOfPlayoff?: 1 | 3 | 5;                // Formato do Bo do playoff
+  bestOfFinal?: 1 | 3 | 5;                  // Formato especial da final (ex: Bo5 no Major)
+  swissRound?: number;                       // Rodada atual do Swiss (0-based)
+  swissRecords?: Record<string, { w: number; l: number; opponents?: string[] }>;  // W-L por time no Swiss
+  phase?: 'group_stage' | 'playoff' | 'finished'; // Fase atual do torneio
+  invitedTeamIds?: string[];                 // Times que entraram por convite (badge visual)
+  userEliminated?: boolean;                  // O usuário já foi eliminado deste torneio
 }
 
 export interface SeasonChampionSnapshot {
@@ -247,6 +315,9 @@ export interface SeasonSummary {
     losses: number;
     titles: number;
   };
+  // Novos campos — temporadas expandidas
+  tournamentResults?: UserTournamentResult[];      // Resultados do user em cada torneio da temporada
+  invitationsGenerated?: TournamentInvitation[];    // Convites gerados para a próxima temporada
 }
 
 /** Campeão de um torneio registrado no histórico permanente (forma enxuta do snapshot). */
@@ -317,4 +388,7 @@ export interface SaveGame {
   trainingPlan?: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
   youthProspects?: Player[]; // Jovens observados na base/scout (opcional p/ saves antigos)
   historicoTemporadas?: SeasonHistoryEntry[]; // Histórico permanente de temporadas (opcional p/ saves antigos)
+  // Novos campos — sistema de convites (opcional p/ saves antigos)
+  invitations?: TournamentInvitation[];    // Convites pendentes para próxima temporada
+  isFixedTeam?: boolean;                   // Time fixo em torneios do tier acima (reputação 80+)
 }

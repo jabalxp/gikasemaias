@@ -1,4 +1,4 @@
-import { GameMap, Match, MatchLivePlayerStats, Player, RoundSim, RoundSimEvent, Team } from '../../types';
+import { GameMap, Match, MatchLivePlayerStats, Player, RoundSim, RoundSimEvent, Team, TeamTactics } from '../../types';
 
 // Configurações econômicas reais de CS
 const COST_ECO = 0;
@@ -85,17 +85,16 @@ const creditKillDamage = (killerId: string, liveStats: Record<string, MatchLiveP
   liveStats[killerId].damage += Math.round(randomRange(90, 110));
 };
 
-// Pesos de balanceamento da simulação (Fase F — calibrados via balanceHarness.ts)
+// Pesos de balanceamento da simulação (Fase F — calibrados para máximo equilíbrio de e-Sports)
 const BALANCE_WEIGHTS = {
-  // F0 — recalibrado para que o RNG DOMINE em gaps pequenos de skill (lutas competitivas) e só
-  // ceda em gaps grandes. Antes (rng 68, aim 1.0, overall 0.15) o gap determinístico dominava o
-  // ruído: 7 de overall já dava ~67% por round → placares 13-5 e blowouts frequentes.
-  rngAmplitude: 98,      // amplitude da aleatoriedade (zebras); maior = mais imprevisível
-  aimWeight: 0.72,       // mira pesa, mas não domina o duelo (era 1.0)
-  overallWeight: 0.07,   // overall já deriva dos atributos; peso baixo evita contar skill em dobro (era 0.15)
-  gamesenseWeight: 0.08,
-  utilityWeight: 0.08,
-  clutchWeight: 0.10,
+  // RNG e Atributos calibrados cirurgicamente para evitar placares irreais de 13x0 e 13x1 constantes.
+  // Gaps de skill dão vantagem ao time superior, mas permitem que o time inferior dispute rounds de forma competitiva.
+  rngAmplitude: 88,      // amplitude da aleatoriedade (zebras)
+  aimWeight: 0.38,       // mira pesa, mas não domina de forma determinística extrema
+  overallWeight: 0.04,   // overall
+  gamesenseWeight: 0.05,
+  utilityWeight: 0.05,
+  clutchWeight: 0.06,
 } as const;
 
 // RNG com distribuição ~normal (soma de 6 uniformes), centrada em 0. Cauda mais espessa que
@@ -124,10 +123,13 @@ export const initLivePlayerStats = (player: Player, startingCash: number = 800):
   cash: startingCash
 });
 
-// Decisão de compra de IA com base nas faixas de saldo
-export const getBuyType = (cash: number): 'eco' | 'force' | 'buy' => {
-  if (cash < 2000) return 'eco';
-  if (cash < 3500) return 'force';
+// Decisão de compra de IA com base nas faixas de saldo e no estilo econômico
+export const getBuyType = (cash: number, style?: TeamTactics['economyStyle']): 'eco' | 'force' | 'buy' => {
+  const ecoLimit = style === 'force' || style === 'aggressive' ? 1400 : style === 'eco' ? 2500 : 2000;
+  const buyLimit = style === 'force' || style === 'aggressive' ? 2800 : style === 'eco' ? 4000 : 3500;
+  
+  if (cash < ecoLimit) return 'eco';
+  if (cash < buyLimit) return 'force';
   return 'buy';
 };
 
@@ -138,10 +140,10 @@ export const getBuyType = (cash: number): 'eco' | 'force' | 'buy' => {
  * overall sozinho decida tudo. Faixa típica ~0.85 a ~1.30.
  */
 export const computeTeamMod = (team: Team, players: Player[], map: GameMap, analystLevel = 0): number => {
-  // Maestria no mapa (0-100) → 0.92 a 1.08 (amplitude reduzida para não dominar o resultado)
+  // Maestria no mapa (0-100) → Ampliado para ±15% de impacto real. O veto agora é decisivo!
   // Analista de mapas (Staff role 'analyst') melhora o estudo de veto: +0.02 por nível.
   const mastery = team.mapMastery[map.id] ?? 50;
-  const masteryFactor = 0.92 + (mastery / 100) * 0.16 + (analystLevel > 0 ? analystLevel * 0.02 : 0);
+  const masteryFactor = 0.85 + (mastery / 100) * 0.30 + (analystLevel > 0 ? analystLevel * 0.02 : 0);
 
   // Forma recente (últimos 5 resultados) → ~0.96 a ~1.04
   const recent = team.stats.recentForm.slice(-5);
@@ -152,11 +154,38 @@ export const computeTeamMod = (team: Team, players: Player[], map: GameMap, anal
   const avgMoral = players.length > 0 ? players.reduce((acc, p) => acc + p.moral, 0) / players.length : 75;
   const moralFactor = 0.97 + (avgMoral / 100) * 0.08;
 
-  // Afinidade tática com o ritmo do mapa (leve): agressivo brilha em mapas rápidos; defensivo em lentos
+  // Afinidade tática com o ritmo do mapa (playstyle e tempo) - Bônus e Penalidades agressivas
   let tacticFactor = 1.0;
   const ps = team.tactics.playstyle;
-  if ((ps === 'aggressive' || ps === 'very_aggressive') && map.pace === 'fast') tacticFactor = 1.03;
-  else if ((ps === 'defensive' || ps === 'very_defensive') && map.pace === 'slow') tacticFactor = 1.03;
+  const tempo = team.tactics.tempo;
+  
+  if (map.pace === 'fast') {
+    if (ps === 'aggressive' || ps === 'very_aggressive') {
+      tacticFactor *= 1.08; // Duelos e avanços rápidos dão bônus coletivo em mapas rápidos (Fast)
+    } else if (ps === 'defensive' || ps === 'very_defensive') {
+      tacticFactor *= 0.94; // Lado excessivamente recuado em mapas rápidos perde espaço crucial
+    }
+  } else if (map.pace === 'slow') {
+    if (ps === 'defensive' || ps === 'very_defensive') {
+      tacticFactor *= 1.08; // Controle cadenciado e passivo dá bônus coletivo em mapas lentos/táticos (Slow)
+    } else if (ps === 'aggressive' || ps === 'very_aggressive') {
+      tacticFactor *= 0.94; // Avançar agressivamente sem utilitárias em mapas lentos/táticos gera punições
+    }
+  }
+  
+  if (map.pace === 'fast') {
+    if (tempo === 'explosive') {
+      tacticFactor *= 1.06;
+    } else if (tempo === 'slow') {
+      tacticFactor *= 0.95;
+    }
+  } else if (map.pace === 'slow') {
+    if (tempo === 'slow') {
+      tacticFactor *= 1.06;
+    } else if (tempo === 'explosive') {
+      tacticFactor *= 0.95;
+    }
+  }
 
   // Liderança (F2): o melhor IGL do time dá coordenação tática ao coletivo (calls, rotações,
   // controle econômico). Um IGL dedicado de alto nível pesa mais que um rifler liderando no improviso.
@@ -331,7 +360,9 @@ const resolveClash = (
   attackerWeaponName: string,
   defenderWeaponName: string,
   attackerSupportEdge = 0,
-  defenderSupportEdge = 0
+  defenderSupportEdge = 0,
+  attackerTactics?: TeamTactics,
+  defenderTactics?: TeamTactics
 ): { winner: 'attacker' | 'defender'; damage: number } => {
 
   const a = attacker.player;
@@ -343,9 +374,20 @@ const resolveClash = (
   const attackerPosFactor = attacker.side === 'CT' ? ctEdge : 1.0;
   const defenderPosFactor = defender.side === 'CT' ? ctEdge : 1.0;
 
+  // Multiplicador de peso de utilitária com base no utilityUsage do time
+  let attUtilWeight = BALANCE_WEIGHTS.utilityWeight;
+  if (attackerTactics?.utilityUsage === 'very_high') attUtilWeight *= 1.4;
+  else if (attackerTactics?.utilityUsage === 'high') attUtilWeight *= 1.2;
+  else if (attackerTactics?.utilityUsage === 'low') attUtilWeight *= 0.6;
+
+  let defUtilWeight = BALANCE_WEIGHTS.utilityWeight;
+  if (defenderTactics?.utilityUsage === 'very_high') defUtilWeight *= 1.4;
+  else if (defenderTactics?.utilityUsage === 'high') defUtilWeight *= 1.2;
+  else if (defenderTactics?.utilityUsage === 'low') defUtilWeight *= 0.6;
+
   // Bônus de utilitária e clutch (clutch só no pós-plant), com pesos normalizados
-  const attUtilityBonus = a.attributes.utility * BALANCE_WEIGHTS.utilityWeight + (map.utilityRequirement * 0.03);
-  const defUtilityBonus = d.attributes.utility * BALANCE_WEIGHTS.utilityWeight + (map.utilityRequirement * 0.03);
+  const attUtilityBonus = a.attributes.utility * attUtilWeight + (map.utilityRequirement * 0.03);
+  const defUtilityBonus = d.attributes.utility * defUtilWeight + (map.utilityRequirement * 0.03);
   const attClutchBonus = isPostPlant ? a.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
   const defClutchBonus = isPostPlant ? d.attributes.clutch * BALANCE_WEIGHTS.clutchWeight : 0;
 
@@ -364,11 +406,33 @@ const resolveClash = (
   let attPower = (a.attributes.aim * attackerPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(attackerWeaponWeight)
     + (a.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (a.overall * BALANCE_WEIGHTS.overallWeight)
     + attUtilityBonus + attClutchBonus + attRoleBonus + attSupportBonus;
+
+  // Bônus de foco tático (retake para CT no pós-plant)
+  if (isPostPlant && attacker.side === 'CT' && attackerTactics?.focus === 'retake') {
+    attPower += 5;
+  }
+
+  // Bônus de foco tático (pickoffs para duelista com AWP no First Blood)
+  if (phase === 'fb' && attackerWeaponName === 'AWP' && attackerTactics?.focus === 'pickoffs') {
+    attPower += 6;
+  }
+
   attPower = attPower * playerCondition(a) * attackerTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
   let defPower = (d.attributes.aim * defenderPosFactor * BALANCE_WEIGHTS.aimWeight) + weaponBonus(defenderWeaponWeight)
     + (d.attributes.gamesense * BALANCE_WEIGHTS.gamesenseWeight) + (d.overall * BALANCE_WEIGHTS.overallWeight)
     + defUtilityBonus + defClutchBonus + defRoleBonus + defSupportBonus;
+
+  // Bônus de foco tático (retake para CT no pós-plant)
+  if (isPostPlant && defender.side === 'CT' && defenderTactics?.focus === 'retake') {
+    defPower += 5;
+  }
+
+  // Bônus de foco tático (pickoffs para duelista com AWP no First Blood)
+  if (phase === 'fb' && defenderWeaponName === 'AWP' && defenderTactics?.focus === 'pickoffs') {
+    defPower += 6;
+  }
+
   defPower = defPower * playerCondition(d) * defenderTeamMod + gaussianRNG(BALANCE_WEIGHTS.rngAmplitude);
 
   const winner = attPower >= defPower ? 'attacker' : 'defender';
@@ -437,7 +501,7 @@ export const simulateRound = (
   const buyTypeB = getBuyType(Math.max(...livePlayersB.map(p => liveStats[p.id].cash)));
 
   // Deduz custos e equipa armas
-  const applyBuy = (players: Player[], type: 'eco' | 'force' | 'buy') => {
+  const applyBuy = (players: Player[], type: 'eco' | 'force' | 'buy', utilityUsage?: 'low' | 'medium' | 'high' | 'very_high') => {
     players.forEach(p => {
       const stats = liveStats[p.id];
       let cost = COST_ECO;
@@ -456,6 +520,14 @@ export const simulateRound = (
           weaponName = WEAPONS.buy.name;
         }
       }
+
+      // Custos adicionais de utilitárias baseados em utilityUsage
+      let utilityCost = 0;
+      if (utilityUsage === 'very_high') utilityCost = 1000;
+      else if (utilityUsage === 'high') utilityCost = 500;
+      else if (utilityUsage === 'low') utilityCost = -800; // economiza
+
+      cost += utilityCost;
       
       stats.cash = Math.max(0, stats.cash - cost);
       stats.weapon = weaponName;
@@ -463,8 +535,8 @@ export const simulateRound = (
     });
   };
 
-  applyBuy(livePlayersA, buyTypeA);
-  applyBuy(livePlayersB, buyTypeB);
+  applyBuy(livePlayersA, buyTypeA, teamA.tactics?.utilityUsage);
+  applyBuy(livePlayersB, buyTypeB, teamB.tactics?.utilityUsage);
 
   // Registra economia de round
   events.push({
@@ -538,7 +610,9 @@ export const simulateRound = (
     trFBWeapon.name,
     ctFBWeapon.name,
     supportEdgeTR,
-    supportEdgeCT
+    supportEdgeCT,
+    teamTR.tactics,
+    teamCT.tactics
   );
 
   if (fbDuelo.winner === 'attacker') {
@@ -596,7 +670,13 @@ export const simulateRound = (
   const survivalRatio = (aliveTRCount / (aliveTRCount + aliveCTCount + 0.001)) * 50;
   const utilityEdge = (avgTRUtility - avgCTUtility) * 0.2;
   // ROLES-03: o Support do TR também facilita a tomada do site (pequeno empurrão na plantChance).
-  const plantChance = Math.min(75, Math.max(5, plantBase + survivalRatio + utilityEdge + supportEdgeTR));
+  
+  // Táticas de Foco no Plant
+  let focusMod = 0;
+  if (teamTR.tactics?.focus === 'execute') focusMod += 8;
+  if (teamCT.tactics?.focus === 'retake') focusMod -= 5;
+  
+  const plantChance = Math.min(75, Math.max(5, plantBase + survivalRatio + utilityEdge + supportEdgeTR + focusMod));
   const isC4Planted = Math.random() * 100 < plantChance && aliveTRCount > 0;
 
   let roundWinnerId = '';
@@ -610,13 +690,32 @@ export const simulateRound = (
     });
 
     // 4. PÓS-PLANT / RETAKE
-    // Roda duelos rápidos entre sobreviventes
-    let maxRetakeDuelos = 4;
-    while (maxRetakeDuelos > 0) {
+    // Roda duelos rápidos entre sobreviventes até a eliminação de um lado ou save inteligente dos CTs
+    let roundEnded = false;
+    let retakeDueloCount = 0;
+    while (!roundEnded) {
       const trAlive = playersTR.filter(p => liveStats[p.id].alive);
       const ctAlive = playersCT.filter(p => liveStats[p.id].alive);
 
       if (trAlive.length === 0 || ctAlive.length === 0) break;
+
+      // Decisão de Save Inteligente dos CTs (Retake Inviável):
+      // Se os CTs sobreviventes estão em desvantagem severa (ex: 1v3, 1v4, 2v4, 2v5) e já se passaram alguns duelos,
+      // os CTs sobreviventes recuam para salvar seus equipamentos.
+      const trCount = trAlive.length;
+      const ctCount = ctAlive.length;
+      if (retakeDueloCount >= 1 && ctCount < trCount && (ctCount === 1 && trCount >= 2 || ctCount === 2 && trCount >= 4)) {
+        events.push({
+          time: '0:15',
+          description: `Os defensores restantes do ${teamCT.tag} decidem recuar e salvar seus armamentos devido à desvantagem numérica.`,
+          type: 'save'
+        });
+        roundEnded = true;
+        break;
+      }
+
+      // Guard-rail de segurança
+      if (retakeDueloCount >= 8) break;
 
       // ROLES-02/04: pós-plant prioriza Lurker/Clutcher; no 1vX o último é o de maior clutch.
       const pTR = pickClutchOrDuelist(trAlive, 'postplant', map);
@@ -639,7 +738,9 @@ export const simulateRound = (
         wTR.name,
         wCT.name,
         supportEdgeTR,
-        supportEdgeCT
+        supportEdgeCT,
+        teamTR.tactics,
+        teamCT.tactics
       );
 
       if (duelo.winner === 'attacker') {
@@ -676,7 +777,7 @@ export const simulateRound = (
         });
       }
 
-      maxRetakeDuelos--;
+      retakeDueloCount++;
     }
 
     const trAliveFinal = playersTR.filter(p => liveStats[p.id].alive).length;
@@ -720,12 +821,31 @@ export const simulateRound = (
       type: 'tactical'
     });
 
-    let maxDefesaDuelos = 4;
-    while (maxDefesaDuelos > 0) {
+    let roundEnded = false;
+    let defesaDueloCount = 0;
+    while (!roundEnded) {
       const trAlive = playersTR.filter(p => liveStats[p.id].alive);
       const ctAlive = playersCT.filter(p => liveStats[p.id].alive);
 
       if (trAlive.length === 0 || ctAlive.length === 0) break;
+
+      // Decisão de Save Inteligente dos TRs (Invasão Inviável):
+      // Se os TRs sobreviventes estão em desvantagem severa (ex: 1v3, 1v4, 2v4) e o tempo está esgotando sem plant,
+      // os TRs recuam e salvam seus armamentos na base.
+      const trCount = trAlive.length;
+      const ctCount = ctAlive.length;
+      if (defesaDueloCount >= 1 && trCount < ctCount && (trCount === 1 && ctCount >= 2 || trCount === 2 && ctCount >= 4)) {
+        events.push({
+          time: '0:15',
+          description: `Os atacantes sobreviventes do ${teamTR.tag} recuam para salvar seus equipamentos e evitam o combate devido à desvantagem.`,
+          type: 'save'
+        });
+        roundEnded = true;
+        break;
+      }
+
+      // Guard-rail de segurança
+      if (defesaDueloCount >= 8) break;
 
       // ROLES-02/04: defesa sem plant é 'mid' (AWPer/Star pesam); 1vX prioriza maior clutch
       // e usa 'postplant' para ativar o bônus de clutch do último homem.
@@ -751,7 +871,9 @@ export const simulateRound = (
         wTR.name,
         wCT.name,
         supportEdgeTR,
-        supportEdgeCT
+        supportEdgeCT,
+        teamTR.tactics,
+        teamCT.tactics
       );
 
       if (duelo.winner === 'attacker') {
@@ -785,7 +907,7 @@ export const simulateRound = (
           weaponUsed: liveStats[pCT.id].weapon
         });
       }
-      maxDefesaDuelos--;
+      defesaDueloCount++;
     }
 
     const trAliveFinal = playersTR.filter(p => liveStats[p.id].alive).length;

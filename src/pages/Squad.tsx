@@ -57,9 +57,12 @@ export const Squad: React.FC = () => {
               </p>
               <p className="text-[10px] text-slate-500 font-semibold truncate max-w-[130px]">{p.name}</p>
             </div>
-            <div className="text-right">
+            <div className="text-right flex flex-col items-end gap-1">
               <span className="text-[10px] font-black text-brand-cyan border border-brand-cyan/35 px-1.5 py-0.5 rounded bg-brand-cyan/5 text-neon-cyan">
                 OVR {p.overall}
+              </span>
+              <span className="text-[9px] font-bold text-slate-400">
+                POT {p.potential}
               </span>
             </div>
           </div>

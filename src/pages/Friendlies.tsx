@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { TeamCrest } from '../components/ui/TeamCrest';
-import { Swords, Search } from 'lucide-react';
+import { Swords, Search, ShieldAlert } from 'lucide-react';
 
 /**
  * Amistosos sob demanda (F5): permite DESAFIAR qualquer time a qualquer momento, com filtro por
@@ -11,10 +11,12 @@ import { Swords, Search } from 'lucide-react';
 type TierFiltro = 'todos' | 1 | 2 | 3 | 4;
 
 export const Friendlies: React.FC = () => {
-  const { teams, userTeamId, iniciarPartidaContra, addToast } = useGameStore();
+  const { teams, userTeamId, iniciarPartidaContra, addToast, players, setScreen } = useGameStore();
   const userTeam = teams[userTeamId];
   const [busca, setBusca] = useState('');
   const [tierFiltro, setTierFiltro] = useState<TierFiltro>('todos');
+
+  const userSquad = Object.values(players).filter((p) => p.teamId === userTeamId && p.status === 'titular');
 
   const lista = useMemo(() => {
     const termo = busca.toLowerCase().trim();
@@ -28,8 +30,10 @@ export const Friendlies: React.FC = () => {
   if (!userTeam) return null;
 
   const desafiar = (id: string, nome: string): void => {
-    iniciarPartidaContra(id, 'amistoso');
-    addToast(`Amistoso contra ${nome} iniciado!`, 'success');
+    const success = iniciarPartidaContra(id, 'amistoso');
+    if (success) {
+      addToast(`Amistoso contra ${nome} iniciado!`, 'success');
+    }
   };
 
   const tiers: TierFiltro[] = ['todos', 1, 2, 3, 4];
@@ -46,6 +50,22 @@ export const Friendlies: React.FC = () => {
           Desafie qualquer organização para um treino. Amistosos NÃO afetam ranking, reputação ou caixa —
           são para testar táticas, mapas e a forma do elenco sem riscos.
         </p>
+
+        {/* AVISO CRÍTICO DE ESCALAÇÃO INCOMPLETA */}
+        {userSquad.length < 5 && (
+          <div className="mt-4 p-3.5 rounded-xl border border-brand-danger/30 bg-brand-danger/5 text-xs text-brand-danger font-bold uppercase tracking-wider flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-brand-danger animate-pulse" />
+              <span>⚠️ Elenco Incompleto! Você precisa de exatamente 5 titulares escalados para jogar amistosos.</span>
+            </div>
+            <button
+              onClick={() => setScreen('squad')}
+              className="px-3.5 py-1.5 rounded-lg bg-brand-danger text-white text-[10px] font-black hover:bg-brand-danger/80 transition-colors uppercase self-start sm:self-auto"
+            >
+              Escalar Agora
+            </button>
+          </div>
+        )}
       </div>
 
       {/* FILTROS */}
@@ -87,8 +107,13 @@ export const Friendlies: React.FC = () => {
               </p>
             </div>
             <button
+              disabled={userSquad.length < 5}
               onClick={() => desafiar(team.id, team.name)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-extrabold uppercase tracking-wider bg-gradient-to-r from-brand-cyan to-brand-purple text-brand-dark hover:scale-105 active:scale-95 transition-transform"
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all ${
+                userSquad.length < 5
+                  ? 'bg-zinc-800 text-slate-500 border border-brand-border cursor-not-allowed opacity-50'
+                  : 'bg-gradient-to-r from-brand-cyan to-brand-purple text-brand-dark hover:scale-105 active:scale-95 transition-transform'
+              }`}
             >
               <Swords className="w-3.5 h-3.5" />
               <span>Desafiar</span>

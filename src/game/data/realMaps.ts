@@ -11,7 +11,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 90,
     sideBias: 'balanced',
     pace: 'fast',
-    description: 'Mapa clássico com foco total em duelos de mira, controle das portas do meio e picks agressivos de AWP no fundo.'
+    description: 'Mapa clássico com foco total em duelos de mira, controle das portas do meio e picks agressivos de AWP no fundo.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_dust2.png'
   },
   {
     id: 'de_mirage',
@@ -23,7 +24,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 75,
     sideBias: 'CT',
     pace: 'medium',
-    description: 'Mapa balanceado e padrão para execuções no Bombsite A e disputas estratégicas de domínio pelo Meio.'
+    description: 'Mapa balanceado e padrão para execuções no Bombsite A e disputas estratégicas de domínio pelo Meio.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_mirage.png'
   },
   {
     id: 'de_inferno',
@@ -35,7 +37,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 45,
     sideBias: 'CT',
     pace: 'slow',
-    description: 'Exige coordenação perfeita de utilitárias na Banana e no Meio. Retakes são frequentes e difíceis.'
+    description: 'Exige coordenação perfeita de utilitárias na Banana e no Meio. Retakes são frequentes e difíceis.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_inferno.png'
   },
   {
     id: 'de_nuke',
@@ -47,7 +50,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 60,
     sideBias: 'CT',
     pace: 'fast',
-    description: 'Mapa com dois níveis (A e B). A rotação rápida, comunicação impecável de IGL e leitura tática são fundamentais.'
+    description: 'Mapa com dois níveis (A e B). A rotação rápida, comunicação impecável de IGL e leitura tática são fundamentais.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_nuke.png'
   },
   {
     id: 'de_ancient',
@@ -59,7 +63,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 70,
     sideBias: 'CT',
     pace: 'medium',
-    description: 'Mapa em floresta tropical. Exige domínio territorial rápido do Meio e do Templo do bombsite A, favorecendo riflers agressivos.'
+    description: 'Mapa em floresta tropical. Exige domínio territorial rápido do Meio e do Templo do bombsite A, favorecendo riflers agressivos.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_ancient.png'
   },
   {
     id: 'de_anubis',
@@ -71,7 +76,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 65,
     sideBias: 'TR',
     pace: 'fast',
-    description: 'Mapa extremamente dinâmico, focado em controle de água/canal e avanços rápidos dos atacantes.'
+    description: 'Mapa extremamente dinâmico, focado em controle de água/canal e avanços rápidos dos atacantes.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_anubis.png'
   },
   {
     id: 'de_overpass',
@@ -83,7 +89,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 80,
     sideBias: 'CT',
     pace: 'medium',
-    description: 'Mapa com vastas áreas externas e bueiros. Exige rotações de longo alcance e excelente coordenação de utilitárias de retake.'
+    description: 'Mapa com vastas áreas externas e bueiros. Exige rotações de longo alcance e excelente coordenação de utilitárias de retake.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_overpass.png'
   },
   {
     id: 'de_vertigo',
@@ -95,7 +102,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 50,
     sideBias: 'TR',
     pace: 'medium',
-    description: 'Partidas disputadas no topo de um arranha-céu. Foco total em utilitárias pesadas na rampa do Bomb A.'
+    description: 'Partidas disputadas no topo de um arranha-céu. Foco total em utilitárias pesadas na rampa do Bomb A.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_vertigo.png'
   },
   {
     id: 'de_train',
@@ -107,7 +115,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 85,
     sideBias: 'CT',
     pace: 'slow',
-    description: 'Pátio ferroviário com trens estreitos. Linhas de visão longas favorecem disparos certeiros de AWP de ambos os lados.'
+    description: 'Pátio ferroviário com trens estreitos. Linhas de visão longas favorecem disparos certeiros de AWP de ambos os lados.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_train.png'
   },
   {
     id: 'de_cache',
@@ -119,7 +128,8 @@ export const realMaps: GameMap[] = [
     awpImpact: 70,
     sideBias: 'balanced',
     pace: 'fast',
-    description: 'Mapa industrial clássico, com estrutura de três vias bem definida, ideal para duelos rápidos de mira no meio.'
+    description: 'Mapa industrial clássico, com estrutura de três vias bem definida, ideal para duelos rápidos de mira no meio.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_cache.png'
   },
   {
     id: 'de_cobblestone',
@@ -131,6 +141,7 @@ export const realMaps: GameMap[] = [
     awpImpact: 80,
     sideBias: 'TR',
     pace: 'slow',
-    description: 'Mapa com castelo medieval e bombsite B de proporções colossais, ideal para táticas de execução cadenciada e pickoffs.'
+    description: 'Mapa com castelo medieval e bombsite B de proporções colossais, ideal para táticas de execução cadenciada e pickoffs.',
+    imageUrl: 'https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/images/de_cobblestone.png'
   }
 ];

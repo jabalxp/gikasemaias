@@ -11,6 +11,7 @@ import { simulateMapVeto } from '../game/simulation/mapVetoSimulator';
 import { simulateWholeMatchQuick, computeTeamMod } from '../game/simulation/matchSimulator';
 import { materializeTournament, deriveEngineFormat, defaultWinProbability, type TournamentTeam } from '../game/simulation/tournamentEngine';
 import type { TournamentMatch, TournamentStanding, TournamentEngineFormat } from '../types';
+import { processarUmaSemana, processarFimTemporada, resolverProgressoTorneioInterativo } from '../game/simulation/seasonEngine';
 
 // Base/Scout: custo de cada rodada de investimento na base (observação de jovens talentos).
 const INVESTIMENTO_BASE_CUSTO = 30000;
@@ -452,6 +453,8 @@ interface GameState {
   trainingPlan: { intensity: 'leve' | 'normal' | 'pesada' | 'bootcamp'; focus: string };
   youthProspects: Player[]; // Base/Scout: jovens observados aguardando promoção
   historicoTemporadas: SeasonHistoryEntry[]; // Histórico permanente de temporadas encerradas
+  invitations: import('../types').TournamentInvitation[];
+  isFixedTeam: boolean;
 
   // Estados locais UI / Sessão
   currentScreen: string;
@@ -459,6 +462,7 @@ interface GameState {
   selectedTeamId: string | null;
   activeTournamentId: string | null;
   activeMatch: Match | null;
+  activeSeries: import('../types').ActiveSeries | null;
   finishedMatch: Match | null; // Partida recém-concluída, exibida na tela de resultado
   activeMatchRoundIndex: number;
   isSimulatingMatch: boolean;
@@ -476,6 +480,8 @@ interface GameState {
   ) => void;
   avancarSemana: () => void;
   avancarAtePartida: () => void; // Avança semanas em sequência até abrir a próxima partida do usuário
+  avancarAposPartida: () => void;
+  encerrarTemporada: () => void;
   definirTitular: (playerId: string, status: 'titular' | 'reserva') => void;
   definirPapelEspecial: (playerId: string, roleType: 'IGL' | 'AWPer' | 'Rifler') => void;
   definirTaticas: (tactics: Team['tactics']) => void;
@@ -500,10 +506,11 @@ interface GameState {
   removeToast: (id: string) => void;
   setSelectedTeamId: (id: string | null) => void;
   setActiveTournamentId: (id: string | null) => void;
+  obterProximoAdversario: (tournamentId: string) => Team | undefined;
   
   // Ações de Partida
   iniciarPartidaAtiva: (match: Match) => void;
-  iniciarPartidaContra: (opponentId: string, competitionId?: string) => void; // Gera partida e abre o pré-jogo
+  iniciarPartidaContra: (opponentId: string, competitionId?: string) => boolean; // Gera partida e abre o pré-jogo
   assistirPartida: () => void;       // Do pré-jogo: assiste round a round
   avancarRoundVisual: () => boolean; // Avança o round visual na simulação interativa
   finalizarPartidaAtiva: () => void;
@@ -537,12 +544,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   trainingPlan: { intensity: 'normal', focus: 'aim' },
   youthProspects: [],
   historicoTemporadas: [],
+  invitations: [],
+  isFixedTeam: false,
 
   currentScreen: 'home',
   selectedPlayerId: null,
   selectedTeamId: null,
   activeTournamentId: null,
   activeMatch: null,
+  activeSeries: null,
   finishedMatch: null,
   activeMatchRoundIndex: 0,
   isSimulatingMatch: false,
@@ -675,8 +685,40 @@ export const useGameStore = create<GameState>((set, get) => ({
     get().salvarJogo();
   },
 
+  obterProximoAdversario: (tournamentId) => {
+    const { tournaments, userTeamId, teams, players } = get();
+    const t = tournaments[tournamentId];
+    if (!t) return undefined;
+
+    const opponents = t.teamIds.filter(id => id !== userTeamId && teams[id]);
+    if (opponents.length === 0) return undefined;
+
+    let userOpponents = t.userOpponents;
+    if (!userOpponents || userOpponents.length === 0) {
+      const mapNeutral = realMaps[0];
+      const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, t.teamIds.length))));
+      const ranked = [...opponents].sort(
+        (a, b) =>
+          computeTournamentStrength(teams[a], players, mapNeutral) -
+          computeTournamentStrength(teams[b], players, mapNeutral)
+      );
+      userOpponents = ranked.slice(0, Math.max(1, Math.min(totalRounds, ranked.length)));
+    }
+
+    const round = t.currentRound;
+    const oppId = userOpponents[Math.min(round, userOpponents.length - 1)];
+    return teams[oppId];
+  },
+
   avancarSemana: () => {
     const { currentWeek, userTeamId, teams, players, tournaments, historyNews, financialHistory, currentSeason, trainingPlan, historicoTemporadas } = get();
+
+    // Bloqueia avanço se o usuário não tiver exatamente 5 titulares escalados
+    const userStarters = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
+    if (userStarters.length < 5) {
+      get().addToast('⚠️ Escalação Incompleta! Você precisa escalar exatamente 5 titulares na aba de Elenco antes de avançar.', 'error');
+      return;
+    }
 
     // 1. Há partida de campeonato do usuário nesta semana? (bracket por rodadas — A5)
     // O adversário varia por rodada; o avanço/eliminação é tratado em finalizarPartidaAtiva.
@@ -685,36 +727,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     );
 
     if (tournamentThisWeek) {
-      const opponents = tournamentThisWeek.teamIds.filter(id => id !== userTeamId && teams[id]);
-      if (opponents.length > 0) {
-        const activeMaps = realMaps.filter(m => m.status === 'active');
-        const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
-
-        // CHAMP-03: SEEDING REAL — em vez de `opponents[round % len]` (que repetia adversário),
-        // pré-computa UMA sequência de adversários DISTINTOS por rodada, ordenada por força
-        // crescente (mais fracos nas primeiras fases, o mais forte na final). Persistida em
-        // `userOpponents` no início do torneio e consumida por `currentRound`. Nunca repete.
-        let userOpponents = tournamentThisWeek.userOpponents;
-        if (!userOpponents || userOpponents.length === 0) {
+      // Inicialização segura e persistida de userOpponents se vazio durante o avanço da semana (fora do render)
+      if (!tournamentThisWeek.userOpponents || tournamentThisWeek.userOpponents.length === 0) {
+        const opponents = tournamentThisWeek.teamIds.filter(id => id !== userTeamId && teams[id]);
+        if (opponents.length > 0) {
+          const mapNeutral = realMaps[0];
           const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tournamentThisWeek.teamIds.length))));
           const ranked = [...opponents].sort(
             (a, b) =>
-              computeTournamentStrength(teams[a], players, mapSelected) -
-              computeTournamentStrength(teams[b], players, mapSelected)
+              computeTournamentStrength(teams[a], players, mapNeutral) -
+              computeTournamentStrength(teams[b], players, mapNeutral)
           );
-          // Pega 1 adversário distinto por rodada (limitado pelo nº de adversários disponíveis).
-          userOpponents = ranked.slice(0, Math.max(1, Math.min(totalRounds, ranked.length)));
-          const updatedTournaments = { ...tournaments, [tournamentThisWeek.id]: { ...tournamentThisWeek, userOpponents } };
-          set({ tournaments: updatedTournaments });
+          const userOpponents = ranked.slice(0, Math.max(1, Math.min(totalRounds, ranked.length)));
+          tournamentThisWeek.userOpponents = userOpponents;
+          set({ tournaments: { ...tournaments, [tournamentThisWeek.id]: { ...tournamentThisWeek, userOpponents } } });
         }
+      }
 
-        // Adversário desta rodada: índice cravado por currentRound (sem módulo → sem repetição).
-        const round = tournamentThisWeek.currentRound;
-        const oppId = userOpponents[Math.min(round, userOpponents.length - 1)];
+      const oppTeam = get().obterProximoAdversario(tournamentThisWeek.id);
+      if (oppTeam) {
+        const activeMaps = realMaps.filter(m => m.status === 'active');
+        const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
+
         const userTeam = teams[userTeamId];
-        const oppTeam = teams[oppId];
         const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
-        const oppSquad = Object.values(players).filter(p => p.teamId === oppId && p.status === 'titular');
+        const oppSquad = Object.values(players).filter(p => p.teamId === oppTeam.id && p.status === 'titular');
 
         // Efeito do Analista (Fase D): bônus de veto aplicado ao time do usuário (teamA).
         const analystId = userTeam.staff.analystId;
@@ -737,17 +774,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       income += sp.weeklyIncome;
     }
 
-    // Receita operacional base (bilheteria/conteúdo/loja). Combina um PISO por tier
-    // (estrutura/contratos fixos da organização, independente da reputação atual) com uma
-    // parcela proporcional à reputação. Dá sustentabilidade ao time mesmo sem patrocínio
-    // assinado: um elenco competente fecha o net semanal >= 0 (objetivo: jogo sustentável).
+    // Receita operacional base (bilheteria/conteúdo/loja). Balanceado para divisões inferiores.
     const tierBaseFloor: Record<Team['tier'], number> = {
-      1: 40000,
-      2: 22000,
-      3: 12000,
-      4: 7000,
+      1: 25000,
+      2: 14000,
+      3: 7500,
+      4: 3000,
     };
-    const baseIncome = Math.round(userTeam.reputation * 500) + tierBaseFloor[userTeam.tier];
+    const baseIncome = Math.round(userTeam.reputation * 100) + tierBaseFloor[userTeam.tier];
     income += baseIncome;
 
     // Despesa de salários de jogadores ativos e staff
@@ -756,8 +790,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       expense += p.salary;
     });
 
-    // Despesa do Staff — salário real de cada membro contratado (Fase D).
-    // Saves antigos têm staffList vazio: o optional chaining zera o custo com segurança.
+    // Despesa do Staff — salário real de cada membro contratado.
     const staffList = get().staffList;
     const staffSlots: (keyof Team['staff'])[] = ['coachId', 'analystId', 'psychologistId', 'scoutId', 'physioId'];
     staffSlots.forEach((slot) => {
@@ -777,6 +810,25 @@ export const useGameStore = create<GameState>((set, get) => ({
       expense += bootcampCost;
     }
 
+    // MULTIPLICADORES DE DIFICULDADE (Finanças Balanceadas & Desafiadoras)
+    let diffIncomeMult = 0.90; // Normal é ligeiramente mais desafiador por padrão
+    let diffExpenseMult = 1.10;
+    const difficulty = get().difficulty;
+    
+    if (difficulty === 'facil') {
+      diffIncomeMult = 1.15;
+      diffExpenseMult = 0.90;
+    } else if (difficulty === 'dificil') {
+      diffIncomeMult = 0.75;
+      diffExpenseMult = 1.25;
+    } else if (difficulty === 'hardcore') {
+      diffIncomeMult = 0.50;
+      diffExpenseMult = 1.60;
+    }
+
+    income = Math.round(income * diffIncomeMult);
+    expense = Math.round(expense * diffExpenseMult);
+
     const netAmount = income - expense;
     const newBudget = userTeam.budget + netAmount;
 
@@ -795,13 +847,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     ];
 
     // CICLO DE PATROCÍNIO: decrementa o contador semanal e expira o contrato ao zerar.
-    // Reatribui updatedTeams[userTeamId] de forma imutável (após o budget já calculado).
     const sponsorExpiryNews: NewsItem[] = [];
     if (updatedTeams[userTeamId].sponsorId && get().sponsors[updatedTeams[userTeamId].sponsorId as string]) {
       const activeSp = get().sponsors[updatedTeams[userTeamId].sponsorId as string];
       const weeksLeft = (updatedTeams[userTeamId].sponsorWeeksRemaining ?? 0) - 1;
       if (weeksLeft <= 0) {
-        // Contrato encerrado: remove sponsorId/sponsorWeeksRemaining preservando o tipo opcional
+        // Contrato encerrado: remove sponsorId/sponsorWeeksRemaining
         const { sponsorId: _sid, sponsorWeeksRemaining: _swr, ...teamWithoutSponsor } = updatedTeams[userTeamId];
         updatedTeams[userTeamId] = teamWithoutSponsor;
         sponsorExpiryNews.push({
@@ -818,19 +869,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    // 3. EVOLUÇÃO POR TREINO (aplica o plano semanal definido pelo usuário) + ENERGIA/MORAL.
-    // Parâmetros por intensidade: chance de evoluir atributo, variação de energia e de moral.
+    // 3. EVOLUÇÃO POR TREINO (plano de treino semanal) + ENERGIA/MORAL.
+    // Parâmetros por intensidade balanceados graduais (evita evolução ultra-rápida indesejada)
     const intensityParams: Record<typeof trainingPlan.intensity, { gainChance: number; energy: number; moral: number; allAttrs: number }> = {
-      leve:     { gainChance: 0.05, energy: 15,  moral: 5,  allAttrs: 0 },
-      normal:   { gainChance: 0.15, energy: -5,  moral: 0,  allAttrs: 0 },
-      pesada:   { gainChance: 0.30, energy: -15, moral: -2, allAttrs: 0 },
-      bootcamp: { gainChance: 0.40, energy: -10, moral: 3,  allAttrs: bootcampCost > 0 ? 1 : 0 },
+      leve:     { gainChance: 0.01, energy: 15,  moral: 5,  allAttrs: 0 },
+      normal:   { gainChance: 0.03, energy: -5,  moral: 0,  allAttrs: 0 },
+      pesada:   { gainChance: 0.06, energy: -15, moral: -2, allAttrs: 0 },
+      bootcamp: { gainChance: 0.09, energy: -10, moral: 3,  allAttrs: 0 },
     };
     const baseParams = intensityParams[trainingPlan.intensity];
-    // Efeito do Coach (Fase D): escala a chance de evolução por nível (1 + level*0.05).
     const coachMultiplier = coachLevel > 0 ? 1 + coachLevel * 0.05 : 1;
     const params = { ...baseParams, gainChance: baseParams.gainChance * coachMultiplier };
-    // Mapeia o foco escolhido para o atributo correspondente (aim e spray treinam mira)
     const focusAttr: keyof Player['attributes'] =
       trainingPlan.focus === 'gamesense' ? 'gamesense'
       : trainingPlan.focus === 'utility' ? 'utility'
@@ -843,39 +892,77 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (p.teamId !== userTeamId) return;
 
       if (p.status === 'titular') {
-        const youthBonus = p.age <= 22 ? 1.6 : 1.0; // jovens evoluem mais (spec §15)
-        // Constrói um novo objeto de atributos (sem mutar o do estado anterior)
+        const youthBonus = p.age <= 22 ? 1.6 : 1.0; // jovens evoluem mais
+        
+        // MODIFICADORES DE DESEMPENHO (Rating real em partidas)
+        let performanceMultiplier = 1.0;
+        let potentialBonusChance = 0.0;
+        if (p.stats.mapsPlayed > 0) {
+          const rating = p.stats.rating;
+          if (rating >= 1.30) {
+            performanceMultiplier = 2.0;  // 100% bônus de evolução para desempenho espetacular!
+            potentialBonusChance = 0.15;  // 15% chance de subir potencial máximo
+          } else if (rating >= 1.15) {
+            performanceMultiplier = 1.4;  // 40% bônus de evolução
+            potentialBonusChance = 0.05;  // 5% chance de subir potencial
+          } else if (rating >= 1.00) {
+            performanceMultiplier = 0.9;  // evolução ligeiramente menor
+          } else if (rating < 0.90) {
+            performanceMultiplier = 0.3;  // evolução travada devido a desempenho fraco
+          }
+        } else {
+          // No banco de reservas e sem ritmo de jogo: evolução severamente punida
+          performanceMultiplier = 0.15;
+        }
+
         const updatedAttrs: Player['attributes'] = { ...p.attributes };
         (['aim', 'gamesense', 'clutch', 'utility', 'igl'] as (keyof Player['attributes'])[]).forEach((k) => {
-          const chance = (k === focusAttr ? params.gainChance * 2 : params.gainChance) * youthBonus;
-          let gain = params.allAttrs; // bootcamp dá +1 base em todos os atributos
+          const chance = (k === focusAttr ? params.gainChance * 2 : params.gainChance) * youthBonus * performanceMultiplier;
+          let gain = params.allAttrs;
           if (Math.random() < chance) gain += 1;
           if (gain > 0) updatedAttrs[k] = Math.min(99, updatedAttrs[k] + gain);
         });
 
-        // Físio (Fase D): recupera +2*level de energia/semana nos titulares.
+        // Físio (Fase D)
         const physioBonus = physioLevel > 0 ? physioLevel * 2 : 0;
         const updatedEnergy = Math.max(0, Math.min(100, p.energy + params.energy + physioBonus));
 
-        // Psicólogo (Fase D): recupera +3*level de moral/semana nos titulares.
+        // Psicólogo (Fase D)
         const psychologistBonus = psychologistLevel > 0 ? psychologistLevel * 3 : 0;
         let moralDelta = params.moral + psychologistBonus;
-        if (caixaNegativo) moralDelta -= 4; // A4: crise financeira derruba a moral
+        if (caixaNegativo) moralDelta -= 4;
         const updatedMoral = Math.max(0, Math.min(100, p.moral + moralDelta));
 
         const updatedOverall = Math.min(99, Math.round((updatedAttrs.aim + updatedAttrs.gamesense + updatedAttrs.clutch + updatedAttrs.utility + updatedAttrs.igl) / 5));
 
+        // CAP DE POTENCIAL MÁXIMO NO TREINO SEMANAL (Evita crescimento infinito e ultra-rápido)
+        let finalAttrs = updatedAttrs;
+        let finalOverall = updatedOverall;
+
+        if (updatedOverall > p.potential) {
+          finalOverall = p.potential;
+          finalAttrs = { ...p.attributes }; // Reverte os ganhos caso estoure o potencial
+        } else {
+          // Bônus de performance: aumenta o potencial de jovens que estão jogando muito!
+          if (p.age <= 22 && Math.random() < potentialBonusChance && p.potential < 99) {
+            const nextPot = p.potential + 1;
+            updatedPlayers[p.id] = { ...p, potential: nextPot };
+            // Adiciona toast avisando
+            get().addToast(`🔥 Excelente desempenho de ${p.nickname}! Seu potencial máximo subiu para ${nextPot}!`, 'success');
+          }
+        }
+
         updatedPlayers[p.id] = {
-          ...p,
-          attributes: updatedAttrs,
+          ...updatedPlayers[p.id] ?? p,
+          attributes: finalAttrs,
           energy: updatedEnergy,
           moral: updatedMoral,
-          overall: updatedOverall,
+          overall: finalOverall,
         };
       } else if (p.status === 'reserva') {
         updatedPlayers[p.id] = {
           ...p,
-          energy: Math.min(100, p.energy + 12), // reservas descansam
+          energy: Math.min(100, p.energy + 12),
           moral: caixaNegativo ? Math.max(0, p.moral - 4) : p.moral,
         };
       }
@@ -1211,12 +1298,58 @@ export const useGameStore = create<GameState>((set, get) => ({
   // O cap de segurança (uma temporada inteira) impede laço infinito caso o usuário não tenha
   // mais torneios agendados no ano.
   avancarAtePartida: () => {
-    const MAX_AVANCOS = 48; // teto de uma temporada — evita laço infinito
+    const { currentWeek, userTeamId, tournaments, players } = get();
+
+    // Bloqueia avanço se o usuário não tiver exatamente 5 titulares escalados
+    const userStarters = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
+    if (userStarters.length < 5) {
+      get().addToast('⚠️ Escalação Incompleta! Você precisa escalar exatamente 5 titulares na aba de Elenco antes de avançar.', 'error');
+      return;
+    }
+    const temCampeonatosAtivos = Object.values(tournaments).some(
+      t => t.teamIds.includes(userTeamId) && !t.isFinished && !t.userEliminated && t.weekScheduled >= currentWeek
+    );
+
+    if (!temCampeonatosAtivos) {
+      return;
+    }
+
+    const MAX_AVANCOS = 48;
     for (let i = 0; i < MAX_AVANCOS; i++) {
+      const { currentWeek: cw } = get();
+      const hasGameNow = Object.values(tournaments).some(
+        t => t.weekScheduled === cw && !t.isFinished && t.teamIds.includes(userTeamId) && !t.userEliminated
+      );
+      if (hasGameNow) {
+        get().avancarSemana();
+        return;
+      }
+
       get().avancarSemana();
-      // Se uma tela imersiva foi aberta (partida pronta ou fim de temporada), para o fast-forward.
       if (get().currentScreen !== 'dashboard') return;
     }
+  },
+
+  avancarAposPartida: () => {
+    // Limpa a tela de resultado e volta para o dashboard
+    set({
+      finishedMatch: null,
+      activeMatch: null,
+      isSimulatingMatch: false,
+      activeMatchRoundIndex: 0,
+      currentScreen: 'dashboard'
+    });
+
+    // Roda a simulação da semana pós-partida
+    get().avancarSemana();
+    if (get().currentScreen !== 'dashboard') return;
+    
+    // Avança silenciosamente até o próximo jogo do usuário
+    get().avancarAtePartida();
+  },
+
+  encerrarTemporada: () => {
+    processarFimTemporada(get, set);
   },
 
   definirTitular: (playerId, status) => {
@@ -1953,38 +2086,121 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Gera uma partida contra um adversário e abre o pré-jogo.
   // Centraliza a criação do confronto para que Dashboard e simulação usem a MESMA partida.
   iniciarPartidaContra: (opponentId, competitionId = 'amistoso') => {
-    const { userTeamId, teams, players } = get();
+    const { userTeamId, teams, players, tournaments, staffList } = get();
     const userTeam = teams[userTeamId];
     const oppTeam = teams[opponentId];
-    if (!userTeam || !oppTeam) return;
+    if (!userTeam || !oppTeam) return false;
 
     const userSquad = Object.values(players).filter(p => p.teamId === userTeamId && p.status === 'titular');
+    if (userSquad.length < 5) {
+      get().addToast('⚠️ Escalação Incompleta! Você precisa escalar exatamente 5 titulares na aba de Elenco antes de disputar uma partida.', 'error');
+      return false;
+    }
+
     const oppSquad = Object.values(players).filter(p => p.teamId === opponentId && p.status === 'titular');
-    const activeMaps = realMaps.filter(m => m.status === 'active');
-    const mapSelected = activeMaps[Math.floor(Math.random() * activeMaps.length)] ?? realMaps[0];
+    
+    // Determina o formato (bestOf)
+    let bestOf: 1 | 3 | 5 = 1; 
+    if (competitionId === 'amistoso') {
+      bestOf = 3; // Friendly padrão é MD3
+    } else {
+      const tourney = tournaments[competitionId];
+      if (tourney) {
+        if (tourney.phase === 'playoff') {
+          const isFinal = tourney.currentRound >= Math.max(1, Math.ceil(Math.log2(Math.max(2, tourney.playoffTeamIds?.length ?? 8)))) - 1;
+          bestOf = isFinal ? (tourney.bestOfFinal ?? 3) : (tourney.bestOfPlayoff ?? 3);
+        } else if (tourney.stageFormat === 'swiss') {
+          const rec = tourney.swissRecords?.[userTeamId];
+          bestOf = (rec && (rec.w === 2 || rec.l === 2)) ? 3 : 1;
+        } else if (tourney.stageFormat === 'gsl_groups') {
+          bestOf = 3; // GSL sempre MD3 para consistência
+        } else if (tourney.stageFormat === 'round_robin') {
+          bestOf = 1; // Round robin MD1
+        } else {
+          bestOf = 1;
+        }
+      }
+    }
 
-    // Efeito do Analista (Fase D): bônus de veto aplicado ao time do usuário (teamA).
+    // Simula veto de mapas
+    const vetoRes = simulateMapVeto(userTeam, oppTeam, realMaps, bestOf === 5 ? 'MD5' : bestOf === 3 ? 'MD3' : 'MD1');
+    const seriesMatches: Match[] = [];
+    let scoreA = 0;
+    let scoreB = 0;
+    const target = Math.floor(bestOf / 2) + 1;
+    
+    // Efeito do Analista (Fase D)
     const analystId = userTeam.staff.analystId;
-    const userAnalystLevel = analystId ? get().staffList[analystId]?.level ?? 0 : 0;
+    const userAnalystLevel = analystId ? staffList[analystId]?.level ?? 0 : 0;
 
-    const match = simulateWholeMatchQuick(userTeam, oppTeam, userSquad, oppSquad, mapSelected, competitionId, { a: userAnalystLevel });
-    set({ activeMatch: match, currentScreen: 'matchPreview', activeMatchRoundIndex: 0, isSimulatingMatch: false });
+    for (const mapId of vetoRes.selectedMapIds) {
+      const mapObj = realMaps.find(m => m.id === mapId) ?? realMaps[0];
+      const m = simulateWholeMatchQuick(userTeam, oppTeam, userSquad, oppSquad, mapObj, competitionId, { a: userAnalystLevel });
+      seriesMatches.push(m);
+      if (m.winnerId === userTeamId) scoreA++;
+      else scoreB++;
+      if (scoreA >= target || scoreB >= target) break;
+    }
+
+    const activeSeries = {
+      tournamentId: competitionId,
+      teamAId: userTeamId,
+      teamBId: opponentId,
+      bestOf,
+      vetoSteps: vetoRes.steps,
+      mapIds: vetoRes.selectedMapIds,
+      currentMapIndex: 0,
+      matches: seriesMatches,
+      scoreA: 0, // Acumulado em exibição
+      scoreB: 0,
+      isFinished: false,
+      winnerId: undefined as string | undefined
+    };
+
+    set({
+      activeSeries,
+      activeMatch: seriesMatches[0],
+      activeMatchRoundIndex: 0,
+      isSimulatingMatch: false,
+      currentScreen: 'matchPreview'
+    });
+    return true;
   },
 
   // Do pré-jogo: assiste a partida round a round (ativa os controles de simulação visual).
   assistirPartida: () => {
-    if (!get().activeMatch) return;
-    set({ isSimulatingMatch: true, currentScreen: 'matchSim', activeMatchRoundIndex: 0 });
+    if (!get().activeSeries) return;
+    set({ isSimulatingMatch: true, currentScreen: 'mapVeto', activeMatchRoundIndex: 0 });
   },
 
   avancarRoundVisual: () => {
-    const { activeMatch, activeMatchRoundIndex } = get();
-    if (!activeMatch) return false;
+    const { activeMatch, activeMatchRoundIndex, activeSeries } = get();
+    if (!activeMatch || !activeSeries) return false;
 
     const nextIndex = activeMatchRoundIndex + 1;
     if (nextIndex >= activeMatch.rounds.length) {
-      // Chegou ao último round: encerra a simulação visual (o usuário então vê o resultado)
-      set({ isSimulatingMatch: false });
+      // Fim do mapa atual! Atualiza os placares da série
+      const mapWinnerId = activeMatch.winnerId;
+      const newScoreA = activeSeries.scoreA + (mapWinnerId === activeSeries.teamAId ? 1 : 0);
+      const newScoreB = activeSeries.scoreB + (mapWinnerId === activeSeries.teamBId ? 1 : 0);
+      const target = Math.floor(activeSeries.bestOf / 2) + 1;
+      const finished = newScoreA >= target || newScoreB >= target;
+
+      const nextMapIdx = activeSeries.currentMapIndex + 1;
+
+      const updatedSeries = {
+        ...activeSeries,
+        scoreA: newScoreA,
+        scoreB: newScoreB,
+        currentMapIndex: finished ? activeSeries.currentMapIndex : nextMapIdx,
+        isFinished: finished,
+        winnerId: finished ? (newScoreA > newScoreB ? activeSeries.teamAId : activeSeries.teamBId) : undefined
+      };
+
+      set({
+        activeSeries: updatedSeries,
+        isSimulatingMatch: false
+      });
       return false;
     }
 
@@ -1993,44 +2209,50 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   finalizarPartidaAtiva: () => {
-    const { activeMatch, userTeamId, teams, currentWeek, tournaments } = get();
-    if (!activeMatch) return;
+    const { activeSeries, userTeamId, teams, currentWeek, tournaments } = get();
+    if (!activeSeries) return;
 
-    // Atualiza pontuações de vitórias/derrotas nos rankings e campeonatos
+    // Se é simulação rápida direta do Preview, finaliza a série no background imediatamente
+    let finalSeries = { ...activeSeries };
+    if (!finalSeries.isFinished) {
+      let scoreA = 0;
+      let scoreB = 0;
+      finalSeries.matches.forEach(m => {
+        if (m.winnerId === finalSeries.teamAId) scoreA++;
+        else scoreB++;
+      });
+      finalSeries.scoreA = scoreA;
+      finalSeries.scoreB = scoreB;
+      finalSeries.isFinished = true;
+      finalSeries.winnerId = scoreA > scoreB ? finalSeries.teamAId : finalSeries.teamBId;
+    }
+
+    const isUserWinner = finalSeries.winnerId === userTeamId;
     const userTeam = teams[userTeamId];
-    const isUserWinner = activeMatch.winnerId === userTeamId;
-
     const updatedTeams = { ...teams };
-    // F4: partida valendo ranking só se for de TORNEIO; o peso do evento (tier) escala os pontos.
-    // Amistoso é treino NEUTRO — não mexe em ranking, reputação, caixa nem estatísticas (corrige
-    // o farm de pontos/reputação via amistoso apontado no relatório).
-    const tourneyForMatch = tournaments[activeMatch.competitionId];
-    const isFriendly = activeMatch.competitionId === 'amistoso' || !tourneyForMatch;
+    
+    const tourneyForMatch = tournaments[finalSeries.tournamentId];
+    const isFriendly = finalSeries.tournamentId === 'amistoso' || !tourneyForMatch;
     const eventWeight = tourneyForMatch ? EVENT_WEIGHT[tourneyForMatch.tier] : 0;
-
-    // Acumula entradas do extrato e aplica TUDO num único set() no fim (evita "torn state"
-    // com múltiplos set intermediários lendo get().financialHistory em sequência).
+    
     const finEntries: { week: number; description: string; amount: number }[] = [];
+
     if (isFriendly) {
-      // Treino: nenhum efeito competitivo (moral/forma já são tratados fora da partida).
       updatedTeams[userTeamId] = userTeam;
     } else if (isUserWinner) {
-      // Premiação base por vitória + bônus do patrocinador (entradas separadas no extrato)
       const basePrize = 5000;
       const activeSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
-      const winBonus = activeSponsor?.winBonus ?? 0; // ?? 0 evita NaN no budget em saves antigos
+      const winBonus = activeSponsor?.winBonus ?? 0;
 
-      // Cópia imutável do time do usuário (inclusive stats aninhado). Vitória soma
-      // +2 de reputação (teto 100): é o motor de progressão que destrava promoção de tier.
       updatedTeams[userTeamId] = {
         ...userTeam,
-        points: userTeam.points + Math.round(50 * eventWeight), // bônus de ranking escalado pelo tier do evento
+        points: userTeam.points + Math.round(50 * eventWeight),
         budget: userTeam.budget + basePrize + winBonus,
         reputation: Math.min(100, userTeam.reputation + 2),
         stats: { ...userTeam.stats, wins: userTeam.stats.wins + 1 },
       };
 
-      finEntries.push({ week: currentWeek, description: 'Premiação por Vitória', amount: basePrize });
+      finEntries.push({ week: currentWeek, description: 'Premiação por Vitória (Série)', amount: basePrize });
       if (activeSponsor && winBonus > 0) {
         finEntries.push({ week: currentWeek, description: `Bônus de Vitória: ${activeSponsor.name}`, amount: winBonus });
       }
@@ -2042,178 +2264,145 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     }
 
-    // Registra notícia sobre a partida
-    const winnerTeam = activeMatch.winnerId === userTeamId ? userTeam : teams[activeMatch.teamAId === userTeamId ? activeMatch.teamBId : activeMatch.teamAId];
-    const loserTeam = activeMatch.winnerId === userTeamId ? teams[activeMatch.teamAId === userTeamId ? activeMatch.teamBId : activeMatch.teamAId] : userTeam;
+    // Registra notícia sobre a partida (usa o primeiro mapa para ilustração da notícia)
+    const winnerTeam = finalSeries.winnerId === userTeamId ? userTeam : teams[finalSeries.teamAId === userTeamId ? finalSeries.teamBId : finalSeries.teamAId];
+    const loserTeam = finalSeries.winnerId === userTeamId ? teams[finalSeries.teamAId === userTeamId ? finalSeries.teamBId : finalSeries.teamAId] : userTeam;
     
-    const wScore = activeMatch.winnerId === activeMatch.teamAId ? activeMatch.scoreA : activeMatch.scoreB;
-    const lScore = activeMatch.winnerId === activeMatch.teamAId ? activeMatch.scoreB : activeMatch.scoreA;
+    const firstMatch = finalSeries.matches[0];
+    const mvpPlayer = get().players[firstMatch.mvpPlayerId ?? ''] ?? Object.values(get().players)[0];
+    const mapObj = realMaps.find(m => m.id === firstMatch.mapId) ?? realMaps[0];
+    const news = generateMatchNews(winnerTeam, loserTeam, finalSeries.scoreA, finalSeries.scoreB, mvpPlayer, mapObj.name, currentWeek);
 
-    const mvpPlayer = get().players[activeMatch.mvpPlayerId ?? ''] ?? Object.values(get().players)[0];
-    const mapObj = realMaps.find(m => m.id === activeMatch.mapId) ?? realMaps[0];
-
-    const news = generateMatchNews(winnerTeam, loserTeam, wScore, lScore, mvpPlayer, mapObj.name, currentWeek);
-
-    // Progresso de campeonato — bracket por rodadas (A5). Partidas amistosas (competitionId
-    // 'amistoso') não têm torneio associado e não entram aqui.
-    const updatedTournaments = { ...tournaments };
-    const tourney = updatedTournaments[activeMatch.competitionId];
+    // Progresso de campeonato interativo
+    const tourney = tournaments[finalSeries.tournamentId];
     let championNews: NewsItem | null = null;
     if (tourney && !tourney.isFinished) {
-      const totalRounds = Math.max(1, Math.ceil(Math.log2(Math.max(2, tourney.teamIds.length))));
-      const updatedT: Tournament = { ...tourney };
-
-      // CHAMP-01/09: registra a partida JOGÁVEL do usuário como TournamentMatch (placar real,
-      // vencedor real, o mapa já sorteado), com nome de fase coerente. bestOf:1 (1 mapa jogável
-      // por enquanto — multi-mapa do usuário está fora de escopo nesta fase).
-      const teamsInThisRound = Math.pow(2, Math.max(1, totalRounds - tourney.currentRound));
-      const userMatch: TournamentMatch = {
-        matchId: `user_${tourney.id}_r${tourney.currentRound}_${currentWeek}`,
-        teamAId: activeMatch.teamAId,
-        teamBId: activeMatch.teamBId,
-        scoreA: activeMatch.scoreA,
-        scoreB: activeMatch.scoreB,
-        winnerId: activeMatch.winnerId ?? userTeamId,
-        bestOf: 1,
-        roundName: userRoundName(teamsInThisRound),
-        stage: 'Playoff',
-        mapId: activeMatch.mapId,
-      };
-      updatedT.matches = [...(tourney.matches ?? []), userMatch];
-
-      if (isUserWinner) {
-        // PRÊMIO POR RODADA: cada vitória no bracket paga uma fatia da premiação, escalando
-        // com o avanço (rodadas finais valem mais). Mantém o caixa saudável ao longo do
-        // torneio, não só no título. ~6% do prizePool na 1ª rodada, dobrando a cada fase.
-        const roundIndex = tourney.currentRound; // 0-based: rodada que acabou de ser vencida
-        // Fração LINEAR e CAPADA da premiação (5% por rodada, teto 20%) — nunca explode além
-        // do prizePool (a fórmula exponencial 1.8^round inflava o caixa). O título paga o resto.
-        const roundPrize = Math.round(tourney.prizePool * Math.min(0.20, 0.05 * (roundIndex + 1)));
-        if (roundPrize > 0) {
-          const teamBeforeRoundPrize = updatedTeams[userTeamId];
-          updatedTeams[userTeamId] = {
-            ...teamBeforeRoundPrize,
-            budget: teamBeforeRoundPrize.budget + roundPrize,
-          };
-          finEntries.push({ week: currentWeek, description: `Premiação de rodada: ${tourney.name}`, amount: roundPrize });
-        }
-
-        updatedT.currentRound = tourney.currentRound + 1;
-        if (updatedT.currentRound >= totalRounds) {
-          // CAMPEÃO: encerra o torneio, paga a premiação e contabiliza o título
-          updatedT.isFinished = true;
-          updatedT.championId = userTeamId;
-
-          // Bônus de título do patrocinador, quando houver contrato ativo
-          const titleSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
-          const titleBonus = titleSponsor?.titleBonus ?? 0; // ?? 0 evita NaN em saves antigos
-
-          // Cópia imutável a partir do estado já atualizado pela vitória (stats aninhado incluso).
-          // Título soma +8 de reputação (teto 100), além do +2 já creditado pela vitória — salto
-          // de reputação que costuma destravar a promoção de tier na virada de temporada.
-          const champTeam = updatedTeams[userTeamId];
-          updatedTeams[userTeamId] = {
-            ...champTeam,
-            budget: champTeam.budget + tourney.prizePool + titleBonus,
-            points: champTeam.points + Math.round(150 * EVENT_WEIGHT[tourney.tier]), // F4: título escala com o tier
-            reputation: Math.min(100, champTeam.reputation + 8),
-            stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
-          };
-
-          finEntries.push({ week: currentWeek, description: `Premiação: Campeão do ${tourney.name}`, amount: tourney.prizePool });
-          if (titleSponsor && titleBonus > 0) {
-            finEntries.push({ week: currentWeek, description: `Bônus de Título: ${titleSponsor.name}`, amount: titleBonus });
+      resolverProgressoTorneioInterativo(get, set, finalSeries);
+      
+      const updatedTourney = get().tournaments[finalSeries.tournamentId];
+      if (updatedTourney) {
+        if (isUserWinner) {
+          const roundIndex = tourney.currentRound;
+          const roundPrize = Math.round(tourney.prizePool * Math.min(0.20, 0.05 * (roundIndex + 1)));
+          if (roundPrize > 0) {
+            const teamBeforeRoundPrize = updatedTeams[userTeamId];
+            updatedTeams[userTeamId] = {
+              ...teamBeforeRoundPrize,
+              budget: teamBeforeRoundPrize.budget + roundPrize,
+            };
+            finEntries.push({ week: currentWeek, description: `Premiação de rodada: ${tourney.name}`, amount: roundPrize });
           }
-          championNews = {
-            id: `champ_${tourney.id}_${currentWeek}`,
-            title: `${userTeam.name} é CAMPEÃO do ${tourney.name}!`,
-            content: `Em uma campanha de tirar o fôlego, o ${userTeam.name} conquistou o título do ${tourney.name} e faturou $${tourney.prizePool.toLocaleString()} em premiação. A torcida faz a festa!`,
-            category: 'results',
-            week: currentWeek,
-            dateStr: `Semana ${currentWeek}`,
-          };
+
+          if (updatedTourney.isFinished && updatedTourney.championId === userTeamId) {
+            const titleSponsor = userTeam.sponsorId ? get().sponsors[userTeam.sponsorId] : undefined;
+            const titleBonus = titleSponsor?.titleBonus ?? 0;
+
+            const champTeam = updatedTeams[userTeamId];
+            updatedTeams[userTeamId] = {
+              ...champTeam,
+              budget: champTeam.budget + tourney.prizePool + titleBonus,
+              points: champTeam.points + Math.round(150 * EVENT_WEIGHT[tourney.tier]),
+              reputation: Math.min(100, champTeam.reputation + 8),
+              stats: { ...champTeam.stats, titles: champTeam.stats.titles + 1 },
+            };
+
+            finEntries.push({ week: currentWeek, description: `Premiação: Campeão do ${tourney.name}`, amount: tourney.prizePool });
+            if (titleSponsor && titleBonus > 0) {
+              finEntries.push({ week: currentWeek, description: `Bônus de Título: ${titleSponsor.name}`, amount: titleBonus });
+            }
+            championNews = {
+              id: `champ_${tourney.id}_${currentWeek}`,
+              title: `${userTeam.name} é CAMPEÃO do ${tourney.name}!`,
+              content: `Em uma campanha de tirar o fôlego, o ${userTeam.name} conquistou o título do ${tourney.name} e faturou $${tourney.prizePool.toLocaleString()} em premiação. A torcida faz a festa!`,
+              category: 'results',
+              week: currentWeek,
+              dateStr: `Semana ${currentWeek}`,
+            };
+          }
         } else {
-          // Avança de fase: a próxima rodada ocorre na semana seguinte
-          updatedT.weekScheduled = currentWeek + 1;
-        }
-      } else {
-        // Eliminado do campeonato: o usuário sai, mas o torneio CONTINUA entre as IAs.
-        // Materializa o restante do bracket (IA vs IA) e coroa um campeão real, premiando-o.
-        // Anexa os jogos/tabela da IA PRESERVANDO a partida do usuário já empurrada acima.
-        updatedT.isFinished = true;
-        const bracketMap = realMaps.find(m => m.id === activeMatch.mapId) ?? realMaps[0];
-        const aiOutcome = crownAiChampion(updatedT, updatedTeams, get().players, userTeamId, bracketMap, currentWeek);
-        if (aiOutcome) {
-          updatedT.championId = aiOutcome.championId;
-          updatedTeams[aiOutcome.championId] = aiOutcome.championTeam;
-          updatedT.matches = [...updatedT.matches, ...aiOutcome.matches];
-          updatedT.standings = [...aiOutcome.standings];
-          championNews = aiOutcome.news;
+          if (updatedTourney.isFinished && updatedTourney.championId && updatedTourney.championId !== userTeamId) {
+            const champTeamId = updatedTourney.championId;
+            const champTeam = updatedTeams[champTeamId] ?? teams[champTeamId] ?? Object.values(teams)[0];
+            if (champTeam) {
+              updatedTeams[champTeamId] = {
+                ...champTeam,
+                budget: champTeam.budget + tourney.prizePool,
+                points: champTeam.points + Math.round(150 * EVENT_WEIGHT[tourney.tier]),
+                stats: { ...champTeam.stats, titles: (champTeam.stats?.titles ?? 0) + 1, wins: (champTeam.stats?.wins ?? 0) + 1 },
+              };
+            }
+            championNews = {
+              id: `champ_ai_${tourney.id}_${currentWeek}`,
+              title: `${champTeam?.name ?? 'Equipe'} conquista o ${tourney.name}!`,
+              content: `O ${champTeam?.name ?? 'vencedor'} superou os adversários no bracket e levantou a taça do ${tourney.name}, faturando $${tourney.prizePool.toLocaleString()} em premiação. Um novo nome entra para a história da competição.`,
+              category: 'results',
+              week: currentWeek,
+              dateStr: `Semana ${currentWeek}`,
+            };
+          }
         }
       }
-      updatedTournaments[activeMatch.competitionId] = updatedT;
     }
 
-    // ACÚMULO DE STATS DE CARREIRA (FASE 1). Amistoso NÃO conta para carreira (gate via isFriendly).
-    // Itera as liveStats da partida e atualiza Player.stats de forma IMUTÁVEL (objeto + stats aninhado).
-    // Rating/ADR/KAST acumulam por MÉDIA PONDERADA pelo número de partidas jogadas (mapsPlayed).
+    // Acúmulo de stats de carreira para todos os mapas da série (HLTV Style)
     const players = get().players;
-    let updatedPlayers = players;
+    let updatedPlayers = { ...players };
     if (!isFriendly) {
-      const rounds = activeMatch.scoreA + activeMatch.scoreB;
-      const mvpId = activeMatch.mvpPlayerId ?? '';
-      updatedPlayers = { ...players };
+      finalSeries.matches.forEach(mapMatch => {
+        const rounds = mapMatch.scoreA + mapMatch.scoreB;
+        const mvpId = mapMatch.mvpPlayerId ?? '';
 
-      for (const [playerId, live] of Object.entries(activeMatch.liveStats)) {
-        const prev = players[playerId];
-        if (!prev) continue; // jogador pode não existir mais (raro); ignora com segurança.
+        for (const [playerId, live] of Object.entries(mapMatch.liveStats)) {
+          const prev = updatedPlayers[playerId];
+          if (!prev) continue;
 
-        const safeRounds = Math.max(1, rounds); // evita divisão por zero em saves/partidas anômalas.
-        const kpr = live.kills / safeRounds;
-        const dpr = live.deaths / safeRounds;
-        const adrMatch = live.damage / safeRounds;
-        const kast = Math.max(
-          40,
-          Math.min(100, Math.round(70 + (live.kills - live.deaths) * 2 + live.assists * 1.5))
-        );
-        const impact = 2.13 * kpr + 0.42 * (live.assists / safeRounds) - 0.41;
-        const ratingMatch = Math.max(
-          0,
-          0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adrMatch + 0.1587
-        );
+          const safeRounds = Math.max(1, rounds);
+          const kpr = live.kills / safeRounds;
+          const dpr = live.deaths / safeRounds;
+          const adrMatch = live.damage / safeRounds;
+          const kast = Math.max(
+            40,
+            Math.min(100, Math.round(70 + (live.kills - live.deaths) * 2 + live.assists * 1.5))
+          );
+          const impact = 2.13 * kpr + 0.42 * (live.assists / safeRounds) - 0.41;
+          const ratingMatch = Math.max(
+            0,
+            0.0073 * kast + 0.3591 * kpr - 0.5329 * dpr + 0.2372 * impact + 0.0032 * adrMatch + 0.1587
+          );
 
-        const old = prev.stats;
-        const mapsOld = old.mapsPlayed;
-        const mapsNew = mapsOld + 1;
+          const old = prev.stats;
+          const mapsOld = old.mapsPlayed;
+          const mapsNew = mapsOld + 1;
 
-        const newRating = Math.round(((old.rating * mapsOld + ratingMatch) / mapsNew) * 100) / 100;
-        const newAdr = Math.round((old.adr * mapsOld + adrMatch) / mapsNew);
-        const newKast = Math.round((old.kast * mapsOld + kast) / mapsNew);
+          const newRating = Math.round(((old.rating * mapsOld + ratingMatch) / mapsNew) * 100) / 100;
+          const newAdr = Math.round((old.adr * mapsOld + adrMatch) / mapsNew);
+          const newKast = Math.round((old.kast * mapsOld + kast) / mapsNew);
 
-        updatedPlayers[playerId] = {
-          ...prev,
-          stats: {
-            ...old,
-            kills: old.kills + live.kills,
-            deaths: old.deaths + live.deaths,
-            assists: old.assists + live.assists,
-            firstKills: old.firstKills + live.firstKills,
-            clutchesWon: old.clutchesWon + live.clutchesWon,
-            mapsPlayed: mapsNew,
-            mvps: old.mvps + (playerId === mvpId ? 1 : 0),
-            rating: newRating,
-            adr: newAdr,
-            kast: newKast,
-          },
-        };
-      }
+          updatedPlayers[playerId] = {
+            ...prev,
+            stats: {
+              ...old,
+              kills: old.kills + live.kills,
+              deaths: old.deaths + live.deaths,
+              assists: old.assists + live.assists,
+              firstKills: old.firstKills + live.firstKills,
+              clutchesWon: old.clutchesWon + live.clutchesWon,
+              mapsPlayed: mapsNew,
+              mvps: old.mvps + (playerId === mvpId ? 1 : 0),
+              rating: newRating,
+              adr: newAdr,
+              kast: newKast,
+            },
+          };
+        }
+      });
     }
 
     set({
       teams: updatedTeams,
       players: updatedPlayers,
-      tournaments: updatedTournaments,
-      finishedMatch: activeMatch, // Preserva a partida para a tela de resultado (MVP, stats)
+      finishedMatch: finalSeries.matches[0], // Legado
+      activeSeries: finalSeries,
       activeMatch: null,
       isSimulatingMatch: false,
       currentScreen: 'matchResult',
@@ -2229,6 +2418,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       finishedMatch: null,
       activeMatch: null,
+      activeSeries: null,
       isSimulatingMatch: false,
       activeMatchRoundIndex: 0,
       currentScreen: 'dashboard'
@@ -2259,7 +2449,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       financialHistory,
       trainingPlan,
       youthProspects,
-      historicoTemporadas
+      historicoTemporadas,
+      invitations,
+      isFixedTeam
     } = get();
 
     const saveObj: SaveGame = {
@@ -2282,7 +2474,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       financialHistory,
       trainingPlan,
       youthProspects,
-      historicoTemporadas
+      historicoTemporadas,
+      invitations,
+      isFixedTeam
     };
 
     localStorage.setItem(slot, JSON.stringify(saveObj));
@@ -2312,6 +2506,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         youthProspects: saveObj.youthProspects ?? [],
         historicoTemporadas: saveObj.historicoTemporadas ?? [],
+        invitations: saveObj.invitations ?? [],
+        isFixedTeam: saveObj.isFixedTeam ?? false,
         currentScreen: 'dashboard',
         gameLoaded: true
       });
@@ -2339,7 +2535,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       financialHistory,
       trainingPlan,
       youthProspects,
-      historicoTemporadas
+      historicoTemporadas,
+      invitations,
+      isFixedTeam
     } = get();
 
     const saveObj: SaveGame = {
@@ -2362,7 +2560,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       financialHistory,
       trainingPlan,
       youthProspects,
-      historicoTemporadas
+      historicoTemporadas,
+      invitations,
+      isFixedTeam
     };
 
     return btoa(JSON.stringify(saveObj));
@@ -2390,6 +2590,8 @@ export const useGameStore = create<GameState>((set, get) => ({
         trainingPlan: saveObj.trainingPlan ?? { intensity: 'normal', focus: 'aim' },
         youthProspects: saveObj.youthProspects ?? [],
         historicoTemporadas: saveObj.historicoTemporadas ?? [],
+        invitations: saveObj.invitations ?? [],
+        isFixedTeam: saveObj.isFixedTeam ?? false,
         currentScreen: 'dashboard',
         gameLoaded: true
       });

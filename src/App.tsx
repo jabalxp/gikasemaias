@@ -26,6 +26,7 @@ import { MatchPreview } from './pages/MatchPreview';
 import { MatchResult } from './pages/MatchResult';
 import { PlayerProfile } from './pages/PlayerProfile';
 import { SeasonSummary } from './pages/SeasonSummary';
+import { MapVeto } from './pages/MapVeto';
 
 function App() {
   const { currentScreen, gameLoaded, carregarJogo } = useGameStore();
@@ -80,13 +81,15 @@ function App() {
         return <MatchSim />;
       case 'seasonSummary':
         return <SeasonSummary />;
+      case 'mapVeto':
+        return <MapVeto />;
       default:
         return <Dashboard />;
     }
   };
 
   // Se a tela for de simulação visual de partida, oculta a sidebar/header padrão para imersão total
-  const isMatchScreen = ['matchSim', 'matchPreview', 'matchResult', 'seasonSummary'].includes(currentScreen);
+  const isMatchScreen = ['matchSim', 'matchPreview', 'matchResult', 'seasonSummary', 'mapVeto'].includes(currentScreen);
 
   // Resolve o layout da tela atual; o ToastContainer é renderizado por cima de qualquer layout.
   const renderLayout = () => {
@@ -100,8 +103,12 @@ function App() {
 
     if (isMatchScreen) {
       return (
-        <div className="min-h-screen bg-[#030306] p-8 flex items-center justify-center select-none overflow-y-auto">
-          <div className="w-full max-w-5xl">
+        <div className="min-h-screen bg-[#030306] bg-grid-pattern p-8 flex items-center justify-center select-none overflow-y-auto relative overflow-hidden">
+          {/* Efeitos de Glows Neon no Fundo */}
+          <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] glow-blur-cyan rounded-full pointer-events-none z-0" />
+          <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] glow-blur-purple rounded-full pointer-events-none z-0" />
+
+          <div className="w-full max-w-5xl z-10 relative">
             <PageTransition key={currentScreen}>{renderScreen()}</PageTransition>
           </div>
         </div>
@@ -109,20 +116,26 @@ function App() {
     }
 
     return (
-      <div className="flex bg-[#030305] min-h-screen text-slate-100 font-sans relative overflow-x-hidden">
-        {/* SIDEBAR DE CONFIGURAÇÃO FIXA */}
-        <Sidebar />
+      <div className="flex bg-[#030305] bg-grid-pattern min-h-screen text-slate-100 font-sans relative overflow-x-hidden">
+        {/* Efeitos de Glows Neon no Fundo */}
+        <div className="absolute top-[-30%] left-[-10%] w-[70%] h-[70%] glow-blur-cyan rounded-full pointer-events-none z-0" />
+        <div className="absolute bottom-[-30%] right-[-10%] w-[70%] h-[70%] glow-blur-purple rounded-full pointer-events-none z-0" />
 
-        {/* CONTAINER PRINCIPAL */}
-        <main className="flex-1 flex flex-col min-h-screen">
-          {/* HEADER SUPERIOR */}
-          <Header />
+        <div className="flex flex-1 z-10 relative">
+          {/* SIDEBAR DE CONFIGURAÇÃO FIXA */}
+          <Sidebar />
 
-          {/* CONTEÚDO DA PÁGINA COM PADDING */}
-          <div className="flex-1 p-8 max-w-7xl w-full mx-auto overflow-y-auto">
-            <PageTransition key={currentScreen}>{renderScreen()}</PageTransition>
-          </div>
-        </main>
+          {/* CONTAINER PRINCIPAL */}
+          <main className="flex-1 flex flex-col min-h-screen">
+            {/* HEADER SUPERIOR */}
+            <Header />
+
+            {/* CONTEÚDO DA PÁGINA COM PADDING */}
+            <div className="flex-1 p-8 max-w-7xl w-full mx-auto overflow-y-auto">
+              <PageTransition key={currentScreen}>{renderScreen()}</PageTransition>
+            </div>
+          </main>
+        </div>
       </div>
     );
   };

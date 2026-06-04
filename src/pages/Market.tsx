@@ -204,9 +204,14 @@ export const Market: React.FC = () => {
                         <p className="text-[9px] text-slate-500 font-semibold">{p.name}</p>
                       </div>
                     </div>
-                    <span className="text-[10px] font-black text-brand-purple border border-brand-purple/35 px-2 py-0.5 rounded bg-brand-purple/5">
-                      OVR {p.overall}
-                    </span>
+                    <div className="text-right flex flex-col items-end gap-1">
+                      <span className="text-[10px] font-black text-brand-purple border border-brand-purple/35 px-2 py-0.5 rounded bg-brand-purple/5">
+                        OVR {p.overall}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400">
+                        POT {p.potential}
+                      </span>
+                    </div>
                   </div>
 
                   {/* INFO PRINCIPAIS */}
@@ -287,7 +292,7 @@ export const Market: React.FC = () => {
                     {panel.player.teamId === 'free_agents'
                       ? 'Agente Livre'
                       : (teams[panel.player.teamId]?.name ?? 'IA Team')}{' '}
-                    · OVR {panel.player.overall} · Valor de mercado ${panel.player.value.toLocaleString()}
+                    · OVR {panel.player.overall} · POT {panel.player.potential} · Valor de mercado ${panel.player.value.toLocaleString()}
                   </p>
                 </div>
               </div>

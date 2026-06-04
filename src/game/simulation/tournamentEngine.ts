@@ -599,3 +599,194 @@ export const deriveEngineFormat = (
   if (format === 'groups') return 'roundRobin';
   return 'singleElim';
 };
+
+// ============================================================================
+// --- HELPERS INTERATIVOS (FASE 3b - SIMULAÇÃO PASSO-A-PASSO COM USUÁRIO) ---
+// ============================================================================
+
+export interface SwissInteractiveRecord {
+  w: number;
+  l: number;
+  opponents: string[];
+}
+
+/**
+ * Emparelha os times da rodada suíça interativa (W-L) evitando rematch.
+ * Retorna uma lista de pares de ids [timeA, timeB].
+ */
+export const generateSwissPairs = (
+  records: Record<string, SwissInteractiveRecord>,
+  teams: readonly TournamentTeam[],
+  round: number
+): [string, string][] => {
+  const internalRecords = Object.entries(records).map(([teamId, rec]) => {
+    const team = teams.find(t => t.id === teamId) || { id: teamId, seed: 99, strength: 50 };
+    return {
+      team,
+      wins: rec.w,
+      losses: rec.l,
+      roundsFor: 0,
+      roundsAgainst: 0,
+      opponents: rec.opponents
+    };
+  });
+  const byId = new Map<string, typeof internalRecords[0]>(internalRecords.map(r => [r.team.id, r]));
+  
+  // Filtra times que ainda não classificaram (3 vitórias) e nem foram eliminados (3 derrotas)
+  const active = internalRecords.filter(r => r.wins < 3 && r.losses < 3);
+  if (active.length === 0) return [];
+  
+  // Agrupa times por recorde de "V-D"
+  const groups = new Map<string, typeof internalRecords[0][]>();
+  for (const r of active) {
+    const key = `${r.wins}-${r.losses}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(r);
+    else groups.set(key, [r]);
+  }
+  
+  const allPairs: [string, string][] = [];
+  const hasPlayed = (x: typeof internalRecords[0], y: typeof internalRecords[0]): boolean =>
+    x.opponents.includes(y.team.id);
+    
+  for (const [, group] of groups) {
+    const sorted = [...group].sort((a, b) => {
+      if (round >= 2) { // Na rodada 3 em diante, ordena por Buchholz
+        const calcBuchholz = (r: typeof internalRecords[0]) =>
+          r.opponents.reduce((acc, oppId) => {
+            const opp = byId.get(oppId);
+            return opp ? acc + (opp.wins - opp.losses) : acc;
+          }, 0);
+        const diff = calcBuchholz(b) - calcBuchholz(a);
+        if (diff !== 0) return diff;
+      }
+      return a.team.seed - b.team.seed;
+    });
+    
+    const pairs = pairGroup(sorted, hasPlayed);
+    if (!pairs) {
+      // Fallback robusto se emparelhamento ideal falhar (rematches inevitáveis)
+      const used = new Set<string>();
+      for (let i = 0; i < sorted.length; i++) {
+        if (used.has(sorted[i].team.id)) continue;
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (used.has(sorted[j].team.id)) continue;
+          allPairs.push([sorted[i].team.id, sorted[j].team.id]);
+          used.add(sorted[i].team.id);
+          used.add(sorted[j].team.id);
+          break;
+        }
+      }
+    } else {
+      pairs.forEach(([a, b]) => {
+        allPairs.push([a.team.id, b.team.id]);
+      });
+    }
+  }
+  
+  return allPairs;
+};
+
+/**
+ * Divide uma lista de timeIds em grupos de 4 times para o formato GSL ou Round Robin,
+ * intercalando seeds para garantir grupos equilibrados.
+ */
+export const distributeIntoGroups = (
+  teamIds: string[],
+  groupCount: number
+): string[][] => {
+  const groups: string[][] = Array.from({ length: groupCount }, () => []);
+  teamIds.forEach((id, index) => {
+    const groupIndex = index % groupCount;
+    groups[groupIndex].push(id);
+  });
+  return groups;
+};
+
+/**
+ * Retorna os confrontos de um grupo GSL de 4 times com base nas partidas já realizadas.
+ * Rodada 0: Opening Matches (Seed 1 v Seed 4, Seed 2 v Seed 3)
+ * Rodada 1: Winners Match (Vencedores R0) + Elimination Match (Perdedores R0)
+ * Rodada 2: Decider Match (Perdedor Winners v Vencedor Elimination)
+ */
+export const getGslGroupRoundMatches = (
+  teamIds: string[],
+  completedMatches: { teamAId: string; teamBId: string; winnerId: string }[]
+): [string, string][] => {
+  if (teamIds.length < 4) return [];
+  
+  if (completedMatches.length === 0) {
+    // Rodada 0: Aberturas
+    return [
+      [teamIds[0], teamIds[3]], // Seed 1 v Seed 4
+      [teamIds[1], teamIds[2]]  // Seed 2 v Seed 3
+    ];
+  }
+  
+  if (completedMatches.length === 2) {
+    // Rodada 1: Winners e Elimination
+    const m1 = completedMatches[0];
+    const m2 = completedMatches[1];
+    
+    const w1 = m1.winnerId;
+    const l1 = m1.winnerId === m1.teamAId ? m1.teamBId : m1.teamAId;
+    
+    const w2 = m2.winnerId;
+    const l2 = m2.winnerId === m2.teamAId ? m2.teamBId : m2.teamAId;
+    
+    return [
+      [w1, w2], // Winners Match
+      [l1, l2]  // Elimination Match
+    ];
+  }
+  
+  if (completedMatches.length === 4) {
+    // Rodada 2: Decider Match
+    const winnersMatch = completedMatches[2];
+    const eliminationMatch = completedMatches[3];
+    
+    const deciderL = winnersMatch.winnerId === winnersMatch.teamAId ? winnersMatch.teamBId : winnersMatch.teamAId; // Perdedor do Winners
+    const deciderW = eliminationMatch.winnerId; // Vencedor do Elimination
+    
+    return [
+      [deciderL, deciderW]
+    ];
+  }
+  
+  return [];
+};
+
+/**
+ * Retorna os confrontos de um grupo Round Robin de 4 times com base na rodada.
+ * Rodada 0: 1 v 4, 2 v 3
+ * Rodada 1: 1 v 3, 4 v 2
+ * Rodada 2: 1 v 2, 3 v 4
+ */
+export const getRoundRobinRoundMatches = (
+  teamIds: string[],
+  round: number
+): [string, string][] => {
+  if (teamIds.length < 4) return [];
+  
+  if (round === 0) {
+    return [
+      [teamIds[0], teamIds[3]],
+      [teamIds[1], teamIds[2]]
+    ];
+  }
+  if (round === 1) {
+    return [
+      [teamIds[0], teamIds[2]],
+      [teamIds[3], teamIds[1]]
+    ];
+  }
+  if (round === 2) {
+    return [
+      [teamIds[0], teamIds[1]],
+      [teamIds[2], teamIds[3]]
+    ];
+  }
+  
+  return [];
+};
+

@@ -71,7 +71,11 @@ export const Dashboard: React.FC = () => {
     avancarSemana,
     avancarAtePartida,
     iniciarPartidaContra,
-    addToast
+    addToast,
+    invitations,
+    isFixedTeam,
+    encerrarTemporada,
+    obterProximoAdversario
   } = useGameStore();
 
   const userTeam = teams[userTeamId];
@@ -88,16 +92,13 @@ export const Dashboard: React.FC = () => {
   // agendado para esta semana ou semanas futuras, com a MENOR weekScheduled. (Espelha o critério
   // de "próximo evento" do Calendar e a seleção de adversário de `avancarSemana`.)
   const nextTournament: Tournament | undefined = Object.values(tournaments)
-    .filter(t => !t.isFinished && t.teamIds.includes(userTeamId) && t.weekScheduled >= currentWeek)
+    .filter(t => !t.isFinished && t.teamIds.includes(userTeamId) && t.weekScheduled >= currentWeek && !t.userEliminated)
     .sort((a, b) => a.weekScheduled - b.weekScheduled)[0];
 
-  // Adversário da rodada: mesma fórmula de avancarSemana — teamIds sem o usuário, indexado por
-  // currentRound. Pode não existir (torneio sem oponentes válidos ainda).
-  const tournamentOpponents = nextTournament
-    ? nextTournament.teamIds.filter(id => id !== userTeamId && teams[id])
-    : [];
-  const nextOpponent: Team | undefined = tournamentOpponents.length > 0
-    ? teams[tournamentOpponents[nextTournament!.currentRound % tournamentOpponents.length]]
+  // Adversário da rodada: mesma fórmula unificada da store (CHAMP-03: SEEDING REAL)
+  // que garante 100% de consistência entre o Dashboard e o simulador de partidas.
+  const nextOpponent: Team | undefined = nextTournament
+    ? obterProximoAdversario(nextTournament.id)
     : undefined;
 
   const isMatchThisWeek = nextTournament?.weekScheduled === currentWeek;
@@ -117,6 +118,11 @@ export const Dashboard: React.FC = () => {
 
   // Handler do botão principal: dispara/avança rumo ao confronto de torneio que importa.
   const handlePrimaryAction = (): void => {
+    if (userSquad.length < 5) {
+      addToast('⚠️ Escalação Incompleta! Redirecionando para a página de Elenco para escalar seus 5 titulares.', 'error');
+      setScreen('squad');
+      return;
+    }
     if (!nextTournament) return;
     if (isMatchThisWeek) {
       avancarSemana(); // já abre o matchPreview do torneio (mesmo caminho do tick semanal)
@@ -201,8 +207,16 @@ export const Dashboard: React.FC = () => {
                   </div>
                 </div>
 
+                {/* AVISO CRÍTICO DE ESCALAÇÃO INCOMPLETA */}
+                {userSquad.length < 5 && (
+                  <div className="mt-4 p-3 rounded-xl border border-brand-danger/30 bg-brand-danger/5 text-[10px] text-brand-danger font-bold uppercase tracking-wider flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 shrink-0 text-brand-danger animate-pulse" />
+                    <span>⚠️ Elenco Incompleto! Escale 5 titulares na aba de Elenco para disputar partidas.</span>
+                  </div>
+                )}
+
                 {/* ODDS (só quando há adversário definido) */}
-                {nextOpponent && (
+                {nextOpponent && userSquad.length >= 5 && (
                   <div className="mt-4 space-y-1">
                     <div className="flex justify-between text-[10px] font-bold text-slate-400 uppercase">
                       <span>Vitória {userTeam.tag}: {userProb}%</span>
@@ -218,9 +232,18 @@ export const Dashboard: React.FC = () => {
 
               <button
                 onClick={handlePrimaryAction}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-extrabold bg-gradient-to-r from-brand-cyan to-brand-purple text-brand-dark hover:scale-102 hover:shadow-md hover:shadow-brand-cyan/20 active:scale-98 transition-all duration-300"
+                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-extrabold transition-all duration-300 ${
+                  userSquad.length < 5
+                    ? 'bg-brand-danger/10 hover:bg-brand-danger/20 text-brand-danger border border-brand-danger/30 hover:scale-102 active:scale-98'
+                    : 'bg-gradient-to-r from-brand-cyan to-brand-purple text-brand-dark hover:scale-102 hover:shadow-md hover:shadow-brand-cyan/20 active:scale-98'
+                }`}
               >
-                {isMatchThisWeek ? (
+                {userSquad.length < 5 ? (
+                  <>
+                    <ShieldAlert className="w-4 h-4 text-brand-danger animate-pulse" />
+                    <span>⚠️ CORRIGIR ESCALAÇÃO (ELENCO)</span>
+                  </>
+                ) : isMatchThisWeek ? (
                   <>
                     <Play className="w-4 h-4 fill-brand-dark" />
                     <span>DISPUTAR PARTIDA AGORA</span>
@@ -234,50 +257,48 @@ export const Dashboard: React.FC = () => {
               </button>
             </>
           ) : (
-            // SEM torneio agendado: não há partida que conte pontos. Oferece um amistoso de
-            // treino claramente rotulado (sem pontos/prêmio/progressão).
+            // SEM torneio agendado: todos os torneios disputados terminaram. Oferece o botão para virada de temporada!
             <>
               <div>
                 <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5 flex items-center gap-1.5">
                   <Trophy className="w-4 h-4 text-brand-purple" />
-                  <span>Próxima Partida</span>
+                  <span>Temporada Finalizada</span>
                 </h3>
-                <div className="text-center text-xs font-semibold text-slate-500 py-6">
-                  Sem torneios agendados no restante da temporada. Avance as semanas para chegar à
-                  virada ou jogue um amistoso de treino.
+                <div className="text-center text-xs font-bold text-slate-300 py-6 px-3 bg-zinc-950/60 rounded-xl border border-brand-border/40">
+                  🎉 Seus campeonatos desta temporada acabaram! Agora simule as partidas restantes do ano e encerre a temporada.
                 </div>
               </div>
               <button
                 onClick={() => {
-                  const sparring = Object.values(teams).find(t => t.id !== userTeamId && t.id !== 'free_agents');
-                  if (sparring) iniciarPartidaContra(sparring.id);
+                  addToast("Simulando rodadas finais e gerando estatísticas de virada...", "success");
+                  encerrarTemporada();
                 }}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-xs font-extrabold border border-brand-border bg-zinc-950/40 text-slate-300 hover:border-brand-cyan/40 transition-all duration-300"
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 via-brand-purple to-brand-cyan text-white hover:scale-102 hover:shadow-lg hover:shadow-brand-purple/20 active:scale-98 transition-all duration-300 animate-pulse"
               >
-                <Dumbbell className="w-4 h-4" />
-                <span>Amistoso (treino, sem pontos)</span>
+                <Trophy className="w-4 h-4 fill-white" />
+                <span>⚡ ENCERRAR TEMPORADA</span>
               </button>
             </>
           )}
         </div>
 
-        {/* BLOCO: FEED DE NOTÍCIAS */}
-        <div className="bg-brand-card border border-brand-border p-5 rounded-2xl h-80 lg:col-span-2 flex flex-col justify-between">
+        {/* BLOCO: FEED DE NOTÍCIAS COMPACTADO */}
+        <div className="bg-brand-card border border-brand-border p-5 rounded-2xl h-80 lg:col-span-1 flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5 flex items-center gap-1.5">
               <Newspaper className="w-4 h-4 text-brand-cyan" />
               <span>Notícias de e-Sports</span>
             </h3>
 
-            <div className="space-y-3.5 max-h-56 overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
               {recentNews.length > 0 ? (
                 recentNews.map((news) => (
-                  <div key={news.id} className="p-3 bg-zinc-950 border border-brand-border hover:border-brand-cyan/35 rounded-xl transition-all duration-200 cursor-pointer">
-                    <h4 className="text-xs font-bold text-white flex justify-between">
-                      <span>{news.title}</span>
-                      <span className="text-[9px] text-slate-500 uppercase tracking-wider">{news.dateStr}</span>
+                  <div key={news.id} className="p-2.5 bg-zinc-950 border border-brand-border hover:border-brand-cyan/35 rounded-xl transition-all duration-200 cursor-pointer">
+                    <h4 className="text-[10px] font-bold text-white flex justify-between gap-1">
+                      <span className="truncate">{news.title}</span>
+                      <span className="text-[8px] text-slate-500 shrink-0 uppercase tracking-wider">{news.dateStr}</span>
                     </h4>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium leading-relaxed truncate">
+                    <p className="text-[9px] text-slate-400 mt-0.5 font-medium leading-relaxed truncate">
                       {news.content}
                     </p>
                   </div>
@@ -286,6 +307,52 @@ export const Dashboard: React.FC = () => {
                 <div className="text-center text-xs font-semibold text-slate-600 py-10">
                   Nenhuma notícia recente no feed.
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* NOVO BLOCO: CONVITES & PRESTÍGIO DO CLUBE */}
+        <div className="bg-brand-card border border-brand-border p-5 rounded-2xl h-80 lg:col-span-1 flex flex-col justify-between">
+          <div>
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5 flex items-center gap-1.5">
+              <Trophy className="w-4 h-4 text-brand-cyan" />
+              <span>Convites & Prestígio</span>
+            </h3>
+
+            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+              {isFixedTeam && (
+                <div className="p-3 rounded-xl border border-yellow-500/30 bg-gradient-to-r from-yellow-500/10 to-brand-purple/10 flex items-start gap-2.5">
+                  <span className="text-lg">🛡️</span>
+                  <div>
+                    <h4 className="text-[10px] font-black text-yellow-400 tracking-wider uppercase">Organização Fixed Slot</h4>
+                    <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed font-semibold">
+                      Sua excelente reputação mundial (Reputação 80+) garante sua vaga definitiva em todos os torneios do circuito Elite!
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {invitations && invitations.length > 0 ? (
+                invitations.map((inv, idx) => (
+                  <div key={idx} className="p-2.5 bg-zinc-950 border border-brand-border hover:border-brand-cyan/35 rounded-xl transition-all duration-200">
+                    <div className="flex justify-between items-center">
+                      <h4 className="text-[10px] font-black text-white truncate">{inv.tournamentName}</h4>
+                      <span className="px-1.5 py-0.5 text-[8px] font-black uppercase rounded bg-brand-cyan/15 text-brand-cyan border border-brand-cyan/30">
+                        Tier {inv.tier}
+                      </span>
+                    </div>
+                    <p className="text-[9px] text-slate-400 mt-1 font-semibold">
+                      Motivo: {inv.reason === 'champion' ? 'Conquistado por Título 🏆' : inv.reason === 'fixed_slot' ? 'Vaga Fixa da Organização 🛡️' : 'Convidado por Reputação ⭐'}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                !isFixedTeam && (
+                  <div className="text-center text-[10px] font-bold text-slate-500 py-10 px-2 leading-relaxed">
+                    Nenhum convite pendente.<br />Vença torneios do seu tier para ser convidado para as grandes ligas na próxima temporada!
+                  </div>
+                )
               )}
             </div>
           </div>
